@@ -170,9 +170,7 @@ module Sophia
     end
 
     def []?(key : String)
-      doc = self[document({"key" => key})]?
-      return nil unless doc
-      doc["value"]?
+      self[document({"key" => key})]?
     end
 
     def delete(doc : Document)

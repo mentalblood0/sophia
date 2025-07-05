@@ -30,11 +30,14 @@ describe Sophia do
         tr[db, key]?.should eq value                                        # alias, in transaction
       end
       db[db.document({"key" => key})]?.not_nil!["value"]?.should eq value # lowlevel, out of transaction
-      db[key]?.should eq value                                            # alias, out of transaction
+      db[key]?.not_nil!["value"]?.should eq value                         # alias, out of transaction
 
-      # iterate from key
       db[key + "1"] = value
       db[key + "0"] = nil
+      db[key + "0"]?.should_not eq nil
+      db[key + "0"]?.not_nil!["value"]?.should eq nil
+
+      # iterate from key
       env.from db, key, ">=" do |key, value|
         Log.debug { "#{key} = #{value}" }
       end
