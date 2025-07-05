@@ -200,10 +200,10 @@ module Sophia
       delete db.document({"key" => key})
     end
 
-    def finalize
-      Api.destroy @tr
-      @input.each { |o| Api.destroy o }
-    end
+    # def finalize
+    #   Api.destroy @tr
+    #   @input.each { |o| Api.destroy o }
+    # end
   end
 
   class Document
@@ -220,8 +220,8 @@ module Sophia
       Api.getstring? o, name
     end
 
-    def finalize
-      Api.destroy @o rescue nil
-    end
+    # def finalize
+    #   Api.destroy @o rescue nil
+    # end
   end
 end
