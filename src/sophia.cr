@@ -145,7 +145,7 @@ module Sophia
     end
 
     def []=(key : String, value : String)
-      Api.set @db, document({"key" => key, "value" => value}).o
+      self << document({"key" => key, "value" => value})
     end
 
     def []?(doc : Document)
@@ -179,7 +179,7 @@ module Sophia
     end
 
     def []=(db : Database, key : String, value : String)
-      Api.set @tr, db.document({"key" => key, "value" => value}).o
+      self << db.document({"key" => key, "value" => value})
     end
 
     def []?(doc : Document)
@@ -194,6 +194,10 @@ module Sophia
 
     def delete(doc : Document)
       Api.delete @tr, doc.o
+    end
+
+    def delete(db : Database, key : String)
+      delete db.document({"key" => key})
     end
 
     def finalize
