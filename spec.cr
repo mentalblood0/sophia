@@ -35,8 +35,8 @@ describe Sophia do
       db[key + "2"] = value
       db[key + "1"] = ""
       db[key + "0"] = nil
-      db[key + "1"]?.should_not eq ""
-      db[key + "0"]?.should_not eq ""
+      db[key + "1"]?.should_not eq nil
+      db[key + "0"]?.should_not eq nil
       db[key + "1"]?.not_nil!["value"]?.should eq nil
       db[key + "0"]?.not_nil!["value"]?.should eq nil
 
