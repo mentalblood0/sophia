@@ -171,7 +171,6 @@ module Sophia
 
   class Transaction
     protected def initialize(@tr : Pointer(Void))
-      @input = [] of Pointer(Void)
     end
 
     def <<(doc : Document)
@@ -199,15 +198,10 @@ module Sophia
     def delete(db : Database, key : String)
       delete db.document({"key" => key})
     end
-
-    # def finalize
-    #   Api.destroy @tr
-    #   @input.each { |o| Api.destroy o }
-    # end
   end
 
   class Document
-    getter o : Pointer(Void)
+    getter o : P
 
     protected def initialize(@o, payload : Payload = Payload.new)
       Log.debug { "Document.new #{@o} #{payload}" }
@@ -219,9 +213,5 @@ module Sophia
       size = Pointer(Int32).malloc 1_u64
       Api.getstring? o, name
     end
-
-    # def finalize
-    #   Api.destroy @o rescue nil
-    # end
   end
 end
