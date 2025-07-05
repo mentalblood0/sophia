@@ -19,6 +19,8 @@ describe Sophia do
       end
       db[db.document({"key" => key})]?.not_nil!["value"]?.not_nil!.should eq value
       db[key]?.should eq value
+      db.delete key
+      db[key]?.should eq nil
     end
   end
 end

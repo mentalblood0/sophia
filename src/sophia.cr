@@ -151,6 +151,14 @@ module Sophia
       return nil unless doc
       doc["value"]?
     end
+
+    def delete(doc : Document)
+      Api.delete @db, doc.o
+    end
+
+    def delete(key : String)
+      delete document({"key" => key})
+    end
   end
 
   class Transaction
@@ -169,6 +177,10 @@ module Sophia
       Document.new r
     end
 
+    def delete(doc : Document)
+      Api.delete @tr, doc.o
+    end
+
     def finalize
       Api.destroy @tr
       @input.each { |o| Api.destroy o }
@@ -176,7 +188,7 @@ module Sophia
   end
 
   class Document
-    property o : Pointer(Void)
+    getter o : Pointer(Void)
     property? need_finalize : Bool = true
 
     protected def initialize(@o, payload : Payload = Payload.new)
