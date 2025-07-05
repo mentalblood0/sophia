@@ -167,7 +167,6 @@ module Sophia
     end
 
     def <<(doc : Document)
-      doc.need_finalize = false
       Api.set @tr, doc.o
     end
 
@@ -189,7 +188,6 @@ module Sophia
 
   class Document
     getter o : Pointer(Void)
-    property? need_finalize : Bool = true
 
     protected def initialize(@o, payload : Payload = Payload.new)
       Log.debug { "Document.new #{@o} #{payload}" }
@@ -203,7 +201,7 @@ module Sophia
     end
 
     def finalize
-      Api.destroy @o if @need_finalize
+      Api.destroy @o rescue nil
     end
   end
 end
