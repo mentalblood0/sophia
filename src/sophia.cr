@@ -140,6 +140,14 @@ module Sophia
       Document.new Api.document(@db), payload
     end
 
+    def <<(doc : Document)
+      Api.set @db, doc.o
+    end
+
+    def []=(key : String, value : String)
+      Api.set @db, document({"key" => key, "value" => value}).o
+    end
+
     def []?(doc : Document)
       r = Api.get? @db, doc.o
       return nil unless r
@@ -170,10 +178,18 @@ module Sophia
       Api.set @tr, doc.o
     end
 
+    def []=(db : Database, key : String, value : String)
+      Api.set @tr, db.document({"key" => key, "value" => value}).o
+    end
+
     def []?(doc : Document)
       r = Api.get? @tr, doc.o
       return nil unless r
       Document.new r
+    end
+
+    def []?(db : Database, key : String)
+      self[db.document({"key" => key})]?.not_nil!["value"]?
     end
 
     def delete(doc : Document)
