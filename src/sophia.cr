@@ -32,7 +32,7 @@ module Sophia
     def self.getstring?(o : P, path : String)
       size = Pointer(Int32).malloc 1_u64
       p = LibSophia.getstring o, path, size
-      return nil if p == P.null
+      return nil if (p == P.null) || (size.value == 0)
       String.new Slice.new(Pointer(UInt8).new(p.address), size.value)
     end
 
@@ -131,9 +131,7 @@ module Sophia
       cursor = Api.cursor @env
       o = db.document({"key" => key, "order" => order}).o
       while o = Api.get? cursor, o
-        key = Api.getstring?(o, "key").not_nil!
-        value = Api.getstring?(o, "value").not_nil!
-        yield key, value
+        yield Api.getstring?(o, "key").not_nil!, Api.getstring?(o, "value")
       end
       Api.destroy cursor
     end
