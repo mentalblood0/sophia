@@ -1,0 +1,197 @@
+require "log"
+
+require "./LibSophia.cr"
+
+module Sophia
+  alias Payload = Hash(String, String | Int64)
+  alias P = Pointer(Void)
+
+  class Exception < Exception
+  end
+
+  class Api
+    def self.env
+      raise Exception.new "sp_env returned NULL" if (r = LibSophia.env) == P.null
+      r
+    end
+
+    def self.set(o : P, path : String, value : String | Int64)
+      if value.is_a? String
+        e = LibSophia.setstring o, path, value, value.size
+        raise Exception.new "sp_setstring returned #{e}" unless e == 0
+      else
+        e = LibSophia.setint o, path, value
+        raise Exception.new "sp_setint returned #{e}" unless e == 0
+      end
+    end
+
+    def self.set(o : P, payload : Payload)
+      payload.each { |name, value| set o, name, value }
+    end
+
+    def self.getstring?(o : P, path : String)
+      size = Pointer(Int32).malloc 1_u64
+      p = LibSophia.getstring o, path, size
+      return nil if p == P.null
+      String.new Slice.new(Pointer(UInt8).new(p.address), size.value)
+    end
+
+    def self.getint?(o : P, path : String)
+      result = LibSophia.getint o, path
+      return nil if result == -1
+      result
+    end
+
+    def self.getobject?(o : P, path : String)
+      r = LibSophia.getobject o, path
+      return nil if r == P.null
+      r
+    end
+
+    def self.open(o : P)
+      e = LibSophia.open o
+      raise Exception.new "sp_open returned #{e}" unless e == 0
+    end
+
+    def self.document(db : P)
+      r = LibSophia.document db
+      raise Exception.new "sp_document returned NULL" if r == P.null
+      r
+    end
+
+    enum CommitResult
+      Error    = -1
+      Success  =  0
+      Rollback =  1
+      Lock     =  2
+    end
+
+    def self.set(o : P, doc : P)
+      e = CommitResult.new LibSophia.set o, doc
+      raise Exception.new "sp_set returned #{e}" unless e == CommitResult::Success
+    end
+
+    def self.get?(o : P, doc : P)
+      r = LibSophia.get o, doc
+      return nil if r == P.null
+      r
+    end
+
+    def self.delete(o : P, doc : P)
+      e = CommitResult.new LibSophia.delete o, doc
+      raise Exception.new "sp_delete returned #{e}" unless e == CommitResult::Success
+    end
+
+    def self.cursor(env : P)
+      r = LibSophia.cursor env
+      raise Exception.new "sp_cursor returned NULL" if r == P.null
+      r
+    end
+
+    def self.begin(env : P)
+      tx = LibSophia.begin env
+      raise Exception.new "sp_begin returned NULL" if tx == P.null
+      tx
+    end
+
+    protected def self.commit(tx : P)
+      e = CommitResult.new LibSophia.commit tx
+      raise Exception.new "sp_commit returned #{e}" unless e == CommitResult::Success
+    end
+
+    protected def self.destroy(o : P)
+      e = LibSophia.destroy o
+      raise Exception.new "sp_destroy returned #{e}" unless (e) == 0
+    end
+  end
+
+  class Environment
+    @env : P
+
+    def initialize(settings : Payload)
+      @env = Api.env
+      Api.set @env, settings
+      Api.open @env
+    end
+
+    def transaction(&)
+      tx = Api.begin @env
+      transaction = Transaction.new tx
+      yield transaction
+      Api.commit tx
+    end
+
+    def database?(name : String)
+      r = Api.getobject? @env, "db.#{name}"
+      return nil unless r
+      Database.new r
+    end
+
+    def finalize
+      Api.destroy @env
+    end
+  end
+
+  class Database
+    protected def initialize(@db : Pointer(Void))
+    end
+
+    def document(payload : Payload)
+      Document.new Api.document(@db), payload
+    end
+
+    def []?(doc : Document)
+      r = Api.get? @db, doc.o
+      return nil unless r
+      Document.new r
+    end
+
+    def []?(key : String)
+      doc = self[document({"key" => key})]?
+      return nil unless doc
+      doc["value"]?
+    end
+  end
+
+  class Transaction
+    protected def initialize(@tr : Pointer(Void))
+      @input = [] of Pointer(Void)
+    end
+
+    def <<(doc : Document)
+      doc.need_finalize = false
+      Api.set @tr, doc.o
+    end
+
+    def []?(doc : Document)
+      r = Api.get? @tr, doc.o
+      return nil unless r
+      Document.new r
+    end
+
+    def finalize
+      Api.destroy @tr
+      @input.each { |o| Api.destroy o }
+    end
+  end
+
+  class Document
+    property o : Pointer(Void)
+    property? need_finalize : Bool = true
+
+    protected def initialize(@o, payload : Payload = Payload.new)
+      Log.debug { "Document.new #{@o} #{payload}" }
+      Api.set @o, payload
+    end
+
+    def []?(name : String)
+      Log.debug { "Document{#{@o}}[\"#{name}\"]" }
+      size = Pointer(Int32).malloc 1_u64
+      Api.getstring? o, name
+    end
+
+    def finalize
+      Api.destroy @o if @need_finalize
+    end
+  end
+end
