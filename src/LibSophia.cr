@@ -1,4 +1,4 @@
-@[Link(ldflags: "#{__DIR__}/sophia.o")]
+@[Link(ldflags: "#{__DIR__}/sophia/sophia.o")]
 lib LibSophia
   fun env = sp_env : Void*
   fun document = sp_document(object : Void*) : Void*

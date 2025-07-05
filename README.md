@@ -1,27 +1,19 @@
 # sophia
 
-TODO: Write a description here
+[Sophia](https://github.com/pmwkaa/sophia) interface for Crystal
 
 ## Installation
 
-TODO: Write installation instructions here
+1. Add the dependency to your `shard.yml`:
+
+   ```yaml
+   dependencies:
+     sophia:
+       github: mentalblood0/sophia
+   ```
+
+2. Run `shards install`
 
 ## Usage
 
-TODO: Write usage instructions here
-
-## Development
-
-TODO: Write development instructions here
-
-## Contributing
-
-1. Fork it (<https://github.com/your-github-user/sophia/fork>)
-2. Create your feature branch (`git checkout -b my-new-feature`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create a new Pull Request
-
-## Contributors
-
-- [mentalblood0](https://github.com/your-github-user) - creator and maintainer
+See spec.cr

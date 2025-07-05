@@ -10,4 +10,7 @@ targets:
 
 crystal: '>= 1.16.3'
 
+scripts:
+  postinstall: cd src/ && git clone --depth 1 https://github.com/pmwkaa/sophia && cd sophia && make
+
 license: MIT
