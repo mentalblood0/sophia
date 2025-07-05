@@ -127,13 +127,24 @@ module Sophia
       Database.new r
     end
 
+    def from(db : Database, key : String, order : String = ">=", &)
+      cursor = Api.cursor @env
+      o = db.document({"key" => key, "order" => order}).o
+      while o = Api.get? cursor, o
+        key = Api.getstring?(o, "key").not_nil!
+        value = Api.getstring?(o, "value").not_nil!
+        yield key, value
+      end
+      Api.destroy cursor
+    end
+
     def finalize
       Api.destroy @env
     end
   end
 
   class Database
-    protected def initialize(@db : Pointer(Void))
+    protected def initialize(@db : P)
     end
 
     def document(payload : Payload)
@@ -144,8 +155,12 @@ module Sophia
       Api.set @db, doc.o
     end
 
-    def []=(key : String, value : String)
-      self << document({"key" => key, "value" => value})
+    def []=(key : String, value : String?)
+      if value
+        self << document({"key" => key, "value" => value})
+      else
+        self << document({"key" => key})
+      end
     end
 
     def []?(doc : Document)
@@ -170,15 +185,19 @@ module Sophia
   end
 
   class Transaction
-    protected def initialize(@tr : Pointer(Void))
+    protected def initialize(@tr : P)
     end
 
     def <<(doc : Document)
       Api.set @tr, doc.o
     end
 
-    def []=(db : Database, key : String, value : String)
-      self << db.document({"key" => key, "value" => value})
+    def []=(db : Database, key : String, value : String?)
+      if value
+        self << db.document({"key" => key, "value" => value})
+      else
+        self << db.document({"key" => key})
+      end
     end
 
     def []?(doc : Document)
@@ -200,7 +219,7 @@ module Sophia
     end
   end
 
-  class Document
+  struct Document
     getter o : P
 
     protected def initialize(@o, payload : Payload = Payload.new)

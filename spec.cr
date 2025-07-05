@@ -6,7 +6,11 @@ require "./src/sophia"
 Log.setup :debug
 
 describe Sophia do
-  env = Sophia::Environment.new({"sophia.path" => "/tmp/sophia", "db" => "test", "db.test.compaction.cache" => 4_i64 * 1024 * 1024 * 1024})
+  env = Sophia::Environment.new({
+    "sophia.path"              => "/tmp/sophia",
+    "db"                       => "test",
+    "db.test.compaction.cache" => 4_i64 * 1024 * 1024 * 1024,
+  })
   describe "Db" do
     db = env.database?("test").not_nil!
     key = Random::DEFAULT.hex 8
@@ -27,6 +31,13 @@ describe Sophia do
       end
       db[db.document({"key" => key})]?.not_nil!["value"]?.should eq value # lowlevel, out of transaction
       db[key]?.should eq value                                            # alias, out of transaction
+
+      # iterate from key
+      db[key + "1"] = value
+      db[key + "0"] = nil
+      env.from db, key, ">=" do |key, value|
+        Log.debug { "#{key} = #{value}" }
+      end
 
       # delete key/value pair
       env.transaction do |tr|
