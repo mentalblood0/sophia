@@ -11,10 +11,7 @@ describe Sophia do
     "sophia.path"              => "/tmp/sophia",
     "db"                       => "test",
     "db.test.compaction.cache" => 4_i64 * 1024 * 1024 * 1024,
-    "db.test.scheme"           => ["a", "b"],
-    "db.test.scheme.a"         => "string,key(0)",
-    "db.test.scheme.b"         => "string",
-  })
+  }.merge Sophia.scheme_conf("test", {"a" => String}, {"b" => String}))
   describe "Environment" do
     it "conf" do
       env.getstring("sophia.path").should eq "/tmp/sophia"

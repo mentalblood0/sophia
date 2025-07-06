@@ -1,19 +1,6 @@
-require "./LibSophia.cr"
+require "./macros"
 
-macro ntt2ht(named_tuple_type)
-  {% if named_tuple_type.resolve? %}
-    {% if named_tuple_type.resolve < NamedTuple %}
-      {% hash_entries = named_tuple_type.resolve.keys.map do |key|
-           %("#{key}") + " => " + "#{named_tuple_type.resolve[key]}"
-         end %}
-      Hash{ {{hash_entries.join(", ").id}} }
-    {% else %}
-      {{ raise "Type must be a NamedTuple" }}
-    {% end %}
-  {% else %}
-    {{ raise "Type not found" }}
-  {% end %}
-end
+require "./LibSophia.cr"
 
 module Sophia
   alias Payload = Hash(String, Value | Array(String))
@@ -36,7 +23,7 @@ module Sophia
         raise Exception.new "sp_setstring returned #{e} for {#{path}, #{value}}" unless e == 0
       elsif value.is_a? Int64
         e = LibSophia.setint o, path, value
-        raise Exception.new "sp_setint returned #{e}" unless e == 0
+        raise Exception.new "sp_setint returned #{e} for (#{path}, #{value})" unless e == 0
       elsif value.is_a? Array(String)
         value.each { |value| set o, path, value }
       end
@@ -126,6 +113,22 @@ module Sophia
 
   alias Multipart = Hash(String, Class)
   alias Scheme = {key: Multipart, value: Multipart}
+
+  def self.scheme_conf(db_name : String, key : Multipart, value : Multipart)
+    type_to_s = {String => "string",
+                 UInt64 => "u64",
+                 UInt32 => "u32",
+                 UInt16 => "u16",
+                 UInt8  => "u8"}
+    r = {} of String => (String | Array(String))
+
+    kscheme = "db.#{db_name}.scheme"
+    r[kscheme] = key.keys + value.keys
+
+    key.each_with_index { |nv, i| r["#{kscheme}.#{nv[0]}"] = "#{type_to_s[nv[1]]},key(#{i})" }
+    value.each { |n, v| r["#{kscheme}.#{n}"] = type_to_s[v] }
+    r
+  end
 
   class Environment
     getter env : P
