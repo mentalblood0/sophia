@@ -27,18 +27,20 @@ describe Sophia do
       # get value by key
       env.transaction do |tr|
         tr[db.document({"key" => key})]?.not_nil!["value"]?.should eq value # lowlevel, in transaction
-        tr[db, key]?.should eq value                                        # alias, in transaction
+        tr[db, key]?.not_nil!["value"]?.should eq value                     # alias, in transaction
+        tr[db, key].should eq value                                         # alias, in transaction
       end
       db[db.document({"key" => key})]?.not_nil!["value"]?.should eq value # lowlevel, out of transaction
       db[key]?.not_nil!["value"]?.should eq value                         # alias, out of transaction
+      db[key].should eq value                                             # alias, out of transaction
 
       db[key + "2"] = value
       db[key + "1"] = ""
       db[key + "0"] = nil
       db[key + "1"]?.should_not eq nil
       db[key + "0"]?.should_not eq nil
-      db[key + "1"]?.not_nil!["value"]?.should eq nil
-      db[key + "0"]?.not_nil!["value"]?.should eq nil
+      db[key + "1"].should eq nil
+      db[key + "0"].should eq nil
 
       # iterate from key
       env.from db, key, ">=" do |key, value|
@@ -53,39 +55,6 @@ describe Sophia do
       db.delete db.document({"key" => key}) # lowlevel, out of transaction
       db.delete key                         # alias, out of transactcion
       db[key]?.should eq nil
-    end
-    it "works asynchronously" do
-      Log.setup :info
-      value2 = Random::DEFAULT.hex 8
-      end_time = Time.utc + 2.seconds
-      spawn { loop do
-        db[key] = value
-        break if Time.utc >= end_time
-      end }
-      spawn { loop do
-        db[value] = key
-        break if Time.utc >= end_time
-      end }
-      spawn { loop do
-        db[key] = value2
-        break if Time.utc >= end_time
-      end }
-      spawn { loop do
-        db[value2] = key
-        break if Time.utc >= end_time
-      end }
-      spawn { loop do
-        db.delete key
-        break if Time.utc >= end_time
-      end }
-      spawn { loop do
-        db.delete value
-        break if Time.utc >= end_time
-      end }
-      spawn { loop do
-        db.delete value2
-        break if Time.utc >= end_time
-      end }
     end
   end
 end

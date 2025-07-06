@@ -171,6 +171,10 @@ module Sophia
       self[document({"key" => key})]?
     end
 
+    def [](key : String)
+      self[key]?.not_nil!["value"]?
+    end
+
     def delete(doc : Document)
       Api.delete @db, doc.o
     end
@@ -203,7 +207,11 @@ module Sophia
     end
 
     def []?(db : Database, key : String)
-      self[db.document({"key" => key})]?.not_nil!["value"]?
+      self[db.document({"key" => key})]?
+    end
+
+    def [](db : Database, key : String)
+      self[db, key]?.not_nil!["value"]?
     end
 
     def delete(doc : Document)
