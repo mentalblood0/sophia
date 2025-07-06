@@ -116,6 +116,10 @@ module Sophia
       Api.open @env
     end
 
+    def []=(name : String, value : String | Int64)
+      Api.set @env, name, value
+    end
+
     def getstring(name : String)
       Api.getstring? @env, name
     end
