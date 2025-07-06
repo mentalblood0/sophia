@@ -41,14 +41,14 @@ describe Sophia do
       db.delete({a: a})
       db[{a: a}]?.should eq nil
 
-      # # delete key/value pair
-      # env.transaction do |tr|
-      #   tr.delete db.document({"key" => key}) # lowlevel, in transactcion
-      #   tr.delete db, key                     # alias, in transaction
-      # end
-      # db.delete db.document({"key" => key}) # lowlevel, out of transaction
-      # db.delete key                         # alias, out of transactcion
-      # db[key]?.should eq nil
+      # same in transaction
+      env.transaction do |tr|
+        dbtr = db.in tr
+        db[{a: a}] = {b: b}
+        db[{a: a}]?.should eq({b: b})
+        db.delete({a: a})
+        db[{a: a}]?.should eq nil
+      end
     end
   end
 end

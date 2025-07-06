@@ -174,22 +174,32 @@ module Sophia
     end
   end
 
-  class Database(K, V)
-    getter scheme : Scheme
-    getter db : P
-    @env : P
+  struct Transaction
+    getter tr : P
 
-    def initialize(environment : Environment, name : String)
+    def initialize(@tr)
+    end
+  end
+
+  struct Database(K, V)
+    @scheme : Scheme
+    @db : P
+    @transaction : Transaction?
+
+    def initialize(@environment : Environment, @name : String, @transaction = nil)
       @scheme = environment.schemes[name]
-      @env = environment.env
       @db = environment.database?(name).not_nil!
     end
 
-    def to_h(payload : K | V)
+    def in(transaction : Transaction)
+      Database(K, V).new @environment, @name, transaction
+    end
+
+    protected def to_h(payload : K | V)
       payload.to_h.map { |k, v| {k.to_s, v} }.to_h
     end
 
-    def set(o : P, payload : K | V)
+    protected def set(o : P, payload : K | V)
       Api.set o, to_h payload
     end
 
@@ -197,7 +207,11 @@ module Sophia
       o = Api.document @db
       set o, key
       set o, value
-      Api.set @db, o
+      if @transaction
+        Api.set @transaction.not_nil!.tr, o
+      else
+        Api.set @db, o
+      end
     end
 
     protected def to_h(o : P, scheme_symbol : Symbol)
@@ -213,14 +227,18 @@ module Sophia
       o = Api.document @db
       set o, key
 
-      r = Api.get? @db, o
+      r = if @transaction
+            Api.get? @transaction.not_nil!.tr, o
+          else
+            Api.get? @db, o
+          end
       return nil unless r
 
       V.from to_h r, :value
     end
 
     def from(key : K, order : String = ">=", &)
-      cursor = Api.cursor @env
+      cursor = Api.cursor @environment.env
       o = Api.document @db
       set o, key
       while o = Api.get? cursor, o
@@ -232,47 +250,11 @@ module Sophia
     def delete(key : K)
       o = Api.document @db
       set o, key
-      Api.delete @db, o
-    end
-  end
-
-  class Transaction
-    protected def initialize(@tr : P)
-    end
-
-    def []=(db : Database, key : K, value : V)
-      o = Api.document db.db
-      set o, key
-      set o, value
-      Api.set @db, o
-    end
-
-    def []?(doc : Document)
-      r = Api.get? @tr, doc.o
-      return nil unless r
-      Document.new r
-    end
-
-    def []?(db : Database, key : Key)
-      self[db.document({"key" => key})]?
-    end
-
-    def [](db : Database, key : Key)
-      self[db, key]?.not_nil!["value"]?
-    end
-
-    def [](db : Database, *keys : Key)
-      r = {} of Key => Value
-      keys.each { |k| r[k] = self[db, k] }
-      r
-    end
-
-    def delete(doc : Document)
-      Api.delete @tr, doc.o
-    end
-
-    def delete(db : Database, key : Key)
-      delete db.document({"key" => key})
+      if @transaction
+        Api.delete @transaction.not_nil!.tr, o
+      else
+        Api.delete @db, o
+      end
     end
   end
 end
