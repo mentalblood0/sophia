@@ -1,5 +1,20 @@
 require "./LibSophia.cr"
 
+macro ntt2ht(named_tuple_type)
+  {% if named_tuple_type.resolve? %}
+    {% if named_tuple_type.resolve < NamedTuple %}
+      {% hash_entries = named_tuple_type.resolve.keys.map do |key|
+           %("#{key}") + " => " + "#{named_tuple_type.resolve[key]}"
+         end %}
+      Hash{ {{hash_entries.join(", ").id}} }
+    {% else %}
+      {{ raise "Type must be a NamedTuple" }}
+    {% end %}
+  {% else %}
+    {{ raise "Type not found" }}
+  {% end %}
+end
+
 module Sophia
   alias Payload = Hash(String, Value | Array(String))
   alias P = Pointer(Void)
@@ -188,6 +203,8 @@ module Sophia
 
     def initialize(@environment : Environment, @name : String, @transaction = nil)
       @scheme = environment.schemes[name]
+      raise Exception.new "Scheme from environment config #{@scheme[:key]} do not match template argument #{K}" if @scheme[:key] != ntt2ht(K)
+      raise Exception.new "Scheme from environment config #{@scheme[:value]} do not match template argument #{K}" if @scheme[:value] != ntt2ht(V)
       @db = environment.database?(name).not_nil!
     end
 
