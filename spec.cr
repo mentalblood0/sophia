@@ -47,6 +47,10 @@ describe Sophia do
       db[key + "0"]?.should_not eq nil
       db[key + "1"].should eq nil
       db[key + "0"].should eq nil
+      db[key, key + "0", key + "1", key + "2"].should eq({key       => value,
+                                                          key + "0" => nil,
+                                                          key + "1" => nil,
+                                                          key + "2" => value})
 
       # iterate from key
       env.from db, key, ">=" do |key, value|

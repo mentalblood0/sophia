@@ -189,6 +189,12 @@ module Sophia
       self[key]?.not_nil!["value"]?
     end
 
+    def [](*keys : String)
+      r = {} of String => (String | Int64 | Nil)
+      keys.each { |k| r[k] = self[k] }
+      r
+    end
+
     def delete(doc : Document)
       Api.delete @db, doc.o
     end
