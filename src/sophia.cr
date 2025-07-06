@@ -1,5 +1,3 @@
-require "log"
-
 require "./LibSophia.cr"
 
 module Sophia
@@ -111,13 +109,41 @@ module Sophia
     end
   end
 
+  alias Multipart = Hash(String, Class)
+  alias Scheme = {key: Multipart, value: Multipart}
+
   class Environment
-    @env : P
+    getter env : P
+    getter schemes = {} of String => Scheme
 
     def initialize(settings : Payload)
       @env = Api.env
       Api.set @env, settings
       Api.open @env
+      settings.each do |skey, svalue|
+        next unless svalue.is_a? String
+        next unless skey_match = skey.match /^db\.(\w+)\.scheme\.(\w+)$/
+
+        db = skey_match[1]
+        key = skey_match[2]
+        @schemes[db] = {key: Multipart.new, value: Multipart.new} unless @schemes[db]?
+
+        next unless svalue_match = svalue.match /^(\w+)(,key\(\d+\))?$/
+        type = {"string"  => String,
+                "u64"     => UInt64,
+                "u64_rev" => UInt64,
+                "u32"     => UInt32,
+                "u32_rev" => UInt32,
+                "u16"     => UInt16,
+                "u16_rev" => UInt16,
+                "u8"      => UInt8,
+                "u8_rev"  => UInt8}[svalue_match[1]]
+        if svalue_match[2]?
+          @schemes[db]["key"][key] = type
+        else
+          @schemes[db]["value"][key] = type
+        end
+      end
     end
 
     def []=(path : String, value : Value)
@@ -139,19 +165,8 @@ module Sophia
       Api.commit tx
     end
 
-    def database?(name : String)
-      r = Api.getobject? @env, "db.#{name}"
-      return nil unless r
-      Database.new r
-    end
-
-    def from(db : Database, key : Key, order : String = ">=", &)
-      cursor = Api.cursor @env
-      o = db.document({"key" => key, "order" => order}).o
-      while o = Api.get? cursor, o
-        yield Api.getstring?(o, "key").not_nil!, Api.getstring?(o, "value")
-      end
-      Api.destroy cursor
+    protected def database?(name : String)
+      Api.getobject? @env, "db.#{name}"
     end
 
     def finalize
@@ -159,48 +174,65 @@ module Sophia
     end
   end
 
-  class Database
-    protected def initialize(@db : P)
+  class Database(K, V)
+    getter scheme : Scheme
+    getter db : P
+    @env : P
+
+    def initialize(environment : Environment, name : String)
+      @scheme = environment.schemes[name]
+      @env = environment.env
+      @db = environment.database?(name).not_nil!
     end
 
-    def document(payload : Payload)
-      Document.new Api.document(@db), payload
+    def to_h(payload : K | V)
+      payload.to_h.map { |k, v| {k.to_s, v} }.to_h
     end
 
-    def <<(doc : Document)
-      Api.set @db, doc.o
+    def set(o : P, payload : K | V)
+      Api.set o, to_h payload
     end
 
-    def []=(key : Key, value : Value)
-      self << document({"key" => key, "value" => value})
+    def []=(key : K, value : V)
+      o = Api.document @db
+      set o, key
+      set o, value
+      Api.set @db, o
     end
 
-    def []?(doc : Document)
-      r = Api.get? @db, doc.o
+    protected def to_h(o : P, scheme_symbol : Symbol)
+      result = {} of Key => Value
+      @scheme[scheme_symbol].each_key do |sym|
+        s = sym.to_s
+        result[s] = Api.getstring? o, s
+      end
+      result
+    end
+
+    def []?(key : K) : V?
+      o = Api.document @db
+      set o, key
+
+      r = Api.get? @db, o
       return nil unless r
-      Document.new r
+
+      V.from to_h r, :value
     end
 
-    def []?(key : Key)
-      self[document({"key" => key})]?
+    def from(key : K, order : String = ">=", &)
+      cursor = Api.cursor @env
+      o = Api.document @db
+      set o, key
+      while o = Api.get? cursor, o
+        yield ({K.from(to_h o, :key), V.from(to_h o, :value)})
+      end
+      Api.destroy cursor
     end
 
-    def [](key : Key)
-      self[key]?.not_nil!["value"]?
-    end
-
-    def [](*keys : Key)
-      r = {} of Key => Value
-      keys.each { |k| r[k] = self[k] }
-      r
-    end
-
-    def delete(doc : Document)
-      Api.delete @db, doc.o
-    end
-
-    def delete(key : Key)
-      delete document({"key" => key})
+    def delete(key : K)
+      o = Api.document @db
+      set o, key
+      Api.delete @db, o
     end
   end
 
@@ -208,12 +240,11 @@ module Sophia
     protected def initialize(@tr : P)
     end
 
-    def <<(doc : Document)
-      Api.set @tr, doc.o
-    end
-
-    def []=(db : Database, key : Key, value : Value)
-      self << db.document({"key" => key, "value" => value})
+    def []=(db : Database, key : K, value : V)
+      o = Api.document db.db
+      set o, key
+      set o, value
+      Api.set @db, o
     end
 
     def []?(doc : Document)
@@ -242,27 +273,6 @@ module Sophia
 
     def delete(db : Database, key : Key)
       delete db.document({"key" => key})
-    end
-  end
-
-  struct Document
-    getter o : P
-
-    protected def initialize(@o, payload : Payload = Payload.new)
-      Log.debug { "Document.new #{@o} #{payload}" }
-      Api.set @o, payload
-    end
-
-    def getstring?(path : String)
-      Api.getstring? @o, path
-    end
-
-    def getint?(path : String)
-      Api.getint? @o, path
-    end
-
-    def []?(path : String)
-      getstring? path
     end
   end
 end

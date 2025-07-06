@@ -1,3 +1,4 @@
+require "log"
 require "wait_group"
 require "spec"
 
@@ -10,6 +11,9 @@ describe Sophia do
     "sophia.path"              => "/tmp/sophia",
     "db"                       => "test",
     "db.test.compaction.cache" => 4_i64 * 1024 * 1024 * 1024,
+    "db.test.scheme"           => ["a", "b"],
+    "db.test.scheme.a"         => "string,key(0)",
+    "db.test.scheme.b"         => "string",
   })
   describe "Environment" do
     it "conf" do
@@ -18,53 +22,33 @@ describe Sophia do
     end
   end
   describe "Database" do
-    db = env.database?("test").not_nil!
-    key = Random::DEFAULT.hex 8
-    value = Random::DEFAULT.hex 8
+    db = Sophia::Database({a: String}, {b: String}).new env, "test"
+    a = Random::DEFAULT.hex 8
+    b = Random::DEFAULT.hex 8
     it "CRUD" do
       # set key=value
-      env.transaction do |tr|
-        tr << db.document({"key" => key, "value" => value}) # lowlevel, in transaction
-        tr[db, key] = value                                 # alias, in transaction
-      end
-      db << db.document({"key" => key, "value" => value}) # lowlevel, out of transaction
-      db[key] = value                                     # alias, out of transaction
+      db[{a: a}] = {b: b}
 
       # get value by key
-      env.transaction do |tr|
-        tr[db.document({"key" => key})]?.not_nil!["value"]?.should eq value # lowlevel, in transaction
-        tr[db, key]?.not_nil!["value"]?.should eq value                     # alias, in transaction
-        tr[db, key].should eq value                                         # alias, in transaction
-      end
-      db[db.document({"key" => key})]?.not_nil!["value"]?.should eq value # lowlevel, out of transaction
-      db[key]?.not_nil!["value"]?.should eq value                         # alias, out of transaction
-      db[key].should eq value                                             # alias, out of transaction
-
-      db[key + "2"] = value
-      db[key + "1"] = ""
-      db[key + "0"] = nil
-      db[key + "1"]?.should_not eq nil
-      db[key + "0"]?.should_not eq nil
-      db[key + "1"].should eq nil
-      db[key + "0"].should eq nil
-      db[key, key + "0", key + "1", key + "2"].should eq({key       => value,
-                                                          key + "0" => nil,
-                                                          key + "1" => nil,
-                                                          key + "2" => value})
+      db[{a: a}]?.should eq({b: b})
 
       # iterate from key
-      env.from db, key, ">=" do |key, value|
-        Log.debug { "#{key} = #{value}" }
+      db.from({a: a}, ">=") do |k, v|
+        db[k]?.should eq(v)
       end
 
       # delete key/value pair
-      env.transaction do |tr|
-        tr.delete db.document({"key" => key}) # lowlevel, in transactcion
-        tr.delete db, key                     # alias, in transaction
-      end
-      db.delete db.document({"key" => key}) # lowlevel, out of transaction
-      db.delete key                         # alias, out of transactcion
-      db[key]?.should eq nil
+      db.delete({a: a})
+      db[{a: a}]?.should eq nil
+
+      # # delete key/value pair
+      # env.transaction do |tr|
+      #   tr.delete db.document({"key" => key}) # lowlevel, in transactcion
+      #   tr.delete db, key                     # alias, in transaction
+      # end
+      # db.delete db.document({"key" => key}) # lowlevel, out of transaction
+      # db.delete key                         # alias, out of transactcion
+      # db[key]?.should eq nil
     end
   end
 end
