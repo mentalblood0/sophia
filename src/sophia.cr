@@ -3,8 +3,10 @@ require "log"
 require "./LibSophia.cr"
 
 module Sophia
-  alias Payload = Hash(String, String | Int64)
+  alias Payload = Hash(String, Value | Array(String))
   alias P = Pointer(Void)
+  alias Key = String | Int64
+  alias Value = String | Int64 | Nil
 
   class Exception < Exception
   end
@@ -15,13 +17,15 @@ module Sophia
       r
     end
 
-    def self.set(o : P, path : String, value : String | Int64)
+    def self.set(o : P, path : String, value : Value | Array(String))
       if value.is_a? String
         e = LibSophia.setstring o, path, value, value.size
-        raise Exception.new "sp_setstring returned #{e}" unless e == 0
-      else
+        raise Exception.new "sp_setstring returned #{e} for {#{path}, #{value}}" unless e == 0
+      elsif value.is_a? Int64
         e = LibSophia.setint o, path, value
         raise Exception.new "sp_setint returned #{e}" unless e == 0
+      elsif value.is_a? Array(String)
+        value.each { |value| set o, path, value }
       end
     end
 
@@ -116,16 +120,16 @@ module Sophia
       Api.open @env
     end
 
-    def []=(name : String, value : String | Int64)
-      Api.set @env, name, value
+    def []=(path : String, value : Value)
+      Api.set @env, path, value
     end
 
-    def getstring(name : String)
-      Api.getstring? @env, name
+    def getstring(path : String)
+      Api.getstring? @env, path
     end
 
-    def getint(name : String)
-      Api.getint? @env, name
+    def getint(path : String)
+      Api.getint? @env, path
     end
 
     def transaction(&)
@@ -141,7 +145,7 @@ module Sophia
       Database.new r
     end
 
-    def from(db : Database, key : String, order : String = ">=", &)
+    def from(db : Database, key : Key, order : String = ">=", &)
       cursor = Api.cursor @env
       o = db.document({"key" => key, "order" => order}).o
       while o = Api.get? cursor, o
@@ -167,12 +171,8 @@ module Sophia
       Api.set @db, doc.o
     end
 
-    def []=(key : String, value : String?)
-      if value
-        self << document({"key" => key, "value" => value})
-      else
-        self << document({"key" => key})
-      end
+    def []=(key : Key, value : Value)
+      self << document({"key" => key, "value" => value})
     end
 
     def []?(doc : Document)
@@ -181,16 +181,16 @@ module Sophia
       Document.new r
     end
 
-    def []?(key : String)
+    def []?(key : Key)
       self[document({"key" => key})]?
     end
 
-    def [](key : String)
+    def [](key : Key)
       self[key]?.not_nil!["value"]?
     end
 
-    def [](*keys : String)
-      r = {} of String => (String | Int64 | Nil)
+    def [](*keys : Key)
+      r = {} of Key => Value
       keys.each { |k| r[k] = self[k] }
       r
     end
@@ -199,7 +199,7 @@ module Sophia
       Api.delete @db, doc.o
     end
 
-    def delete(key : String)
+    def delete(key : Key)
       delete document({"key" => key})
     end
   end
@@ -212,12 +212,8 @@ module Sophia
       Api.set @tr, doc.o
     end
 
-    def []=(db : Database, key : String, value : String?)
-      if value
-        self << db.document({"key" => key, "value" => value})
-      else
-        self << db.document({"key" => key})
-      end
+    def []=(db : Database, key : Key, value : Value)
+      self << db.document({"key" => key, "value" => value})
     end
 
     def []?(doc : Document)
@@ -226,16 +222,16 @@ module Sophia
       Document.new r
     end
 
-    def []?(db : Database, key : String)
+    def []?(db : Database, key : Key)
       self[db.document({"key" => key})]?
     end
 
-    def [](db : Database, key : String)
+    def [](db : Database, key : Key)
       self[db, key]?.not_nil!["value"]?
     end
 
-    def [](db : Database, *keys : String)
-      r = {} of String => (String | Int64 | Nil)
+    def [](db : Database, *keys : Key)
+      r = {} of Key => Value
       keys.each { |k| r[k] = self[db, k] }
       r
     end
@@ -244,7 +240,7 @@ module Sophia
       Api.delete @tr, doc.o
     end
 
-    def delete(db : Database, key : String)
+    def delete(db : Database, key : Key)
       delete db.document({"key" => key})
     end
   end
@@ -257,10 +253,16 @@ module Sophia
       Api.set @o, payload
     end
 
-    def []?(name : String)
-      Log.debug { "Document{#{@o}}[\"#{name}\"]" }
-      size = Pointer(Int32).malloc 1_u64
-      Api.getstring? o, name
+    def getstring?(path : String)
+      Api.getstring? @o, path
+    end
+
+    def getint?(path : String)
+      Api.getint? @o, path
+    end
+
+    def []?(path : String)
+      getstring? path
     end
   end
 end
