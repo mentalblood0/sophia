@@ -11,7 +11,13 @@ describe Sophia do
     "db"                       => "test",
     "db.test.compaction.cache" => 4_i64 * 1024 * 1024 * 1024,
   })
-  describe "Db" do
+  describe "Environment" do
+    it "conf" do
+      env.getstring("sophia.path").should eq "/tmp/sophia"
+      env.getint("db.test.compaction.cache").should eq 4_i64 * 1024 * 1024 * 1024
+    end
+  end
+  describe "Database" do
     db = env.database?("test").not_nil!
     key = Random::DEFAULT.hex 8
     value = Random::DEFAULT.hex 8

@@ -33,7 +33,9 @@ module Sophia
       size = Pointer(Int32).malloc 1_u64
       p = LibSophia.getstring o, path, size
       return nil if (p == P.null) || (size.value == 0)
-      String.new Slice.new(Pointer(UInt8).new(p.address), size.value)
+      slice = Slice.new(Pointer(UInt8).new(p.address), size.value)
+      slice = slice[0, slice.size - 1] if slice.last == 0
+      String.new slice
     end
 
     def self.getint?(o : P, path : String)
@@ -112,6 +114,14 @@ module Sophia
       @env = Api.env
       Api.set @env, settings
       Api.open @env
+    end
+
+    def getstring(name : String)
+      Api.getstring? @env, name
+    end
+
+    def getint(name : String)
+      Api.getint? @env, name
     end
 
     def transaction(&)
