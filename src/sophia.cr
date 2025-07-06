@@ -234,9 +234,9 @@ module Sophia
       self[db, key]?.not_nil!["value"]?
     end
 
-    def [](*keys : String)
+    def [](db : Database, *keys : String)
       r = {} of String => (String | Int64 | Nil)
-      keys.each { |k| r[k] = self[k] }
+      keys.each { |k| r[k] = self[db, k] }
       r
     end
 
