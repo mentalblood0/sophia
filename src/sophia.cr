@@ -204,7 +204,7 @@ module Sophia
     def initialize(@environment : Environment, @name : String, @transaction = nil)
       @scheme = environment.schemes[name]
       raise Exception.new "Scheme from environment config #{@scheme[:key]} do not match template argument #{K}" if @scheme[:key] != ntt2ht(K)
-      raise Exception.new "Scheme from environment config #{@scheme[:value]} do not match template argument #{K}" if @scheme[:value] != ntt2ht(V)
+      raise Exception.new "Scheme from environment config #{@scheme[:value]} do not match template argument #{V}" if @scheme[:value] != ntt2ht(V)
       @db = environment.database?(name).not_nil!
     end
 
