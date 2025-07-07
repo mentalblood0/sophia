@@ -39,7 +39,8 @@ module Sophia
     def self.getstring?(o : P, path : String)
       size = Pointer(Int32).malloc 1_u64
       p = LibSophia.getstring o, path, size
-      return nil if (p == P.null) || (size.value == 0)
+      return nil if p == P.null
+      return "" if size.value == 0
       slice = Slice.new(Pointer(UInt8).new(p.address), size.value)
       slice = slice[0, slice.size - 1] if slice.last == 0
       String.new slice
@@ -117,23 +118,12 @@ module Sophia
   alias Multipart = Hash(String, Class)
   alias Scheme = {key: Multipart, value: Multipart}
 
-  alias StringOpt = String?
-  alias UInt64Opt = UInt64?
-  alias UInt32Opt = UInt32?
-  alias UInt16Opt = UInt16?
-  alias UInt8Opt = UInt8?
-
   class Environment
-    @@type_to_s = {String    => "string",
-                   StringOpt => "string",
-                   UInt64    => "u64",
-                   UInt64Opt => "u64",
-                   UInt32    => "u32",
-                   UInt32Opt => "u32",
-                   UInt16    => "u16",
-                   UInt16Opt => "u16",
-                   UInt8     => "u8",
-                   UInt8Opt  => "u8"}
+    @@type_to_s = {String => "string",
+                   UInt64 => "u64",
+                   UInt32 => "u32",
+                   UInt16 => "u16",
+                   UInt8  => "u8"}
 
     getter env : P
 
@@ -235,17 +225,17 @@ module Sophia
       result = {} of Key => Value
       @scheme[scheme_symbol].each do |sym, type|
         s = sym.to_s
-        result[s] = if (type == String) || (type == StringOpt)
+        result[s] = if type == String
                       Api.getstring? o, s
                     else
                       if v = Api.getint? o, s
-                        if (type == UInt8) || (type == UInt8Opt)
+                        if type == UInt8
                           v.to_u8
-                        elsif (type == UInt16) || (type == UInt16Opt)
+                        elsif type == UInt16
                           v.to_u16
-                        elsif (type == UInt32) || (type == UInt32Opt)
+                        elsif type == UInt32
                           v.to_u32
-                        elsif (type == UInt64) || (type == UInt64Opt)
+                        elsif type == UInt64
                           v.to_u64
                         end
                       end
