@@ -11,6 +11,7 @@ describe Sophia do
     env = Sophia::Environment.new({
       "sophia.path"              => "/tmp/sophia",
       "db"                       => "test",
+      "db.test.compression"      => "zstd",
       "db.test.compaction.cache" => 4_i64 * 1024 * 1024 * 1024,
     }.merge Sophia.scheme_conf("test", {"a" => String}, {"b" => String}))
 
@@ -20,6 +21,10 @@ describe Sophia do
 
     it "sets key=value" do
       db[{a: a}] = {b: b}
+    end
+
+    it "check if has key" do
+      db.has_key?({a: a})
     end
 
     it "get value by key" do

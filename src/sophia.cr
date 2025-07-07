@@ -234,18 +234,25 @@ module Sophia
       result
     end
 
-    def []?(key : K) : V?
+    protected def get_o?(key : K)
       o = Api.document @db
       set o, key
 
-      r = if @transaction
-            Api.get? @transaction.not_nil!.tr, o
-          else
-            Api.get? @db, o
-          end
-      return nil unless r
+      if @transaction
+        Api.get? @transaction.not_nil!.tr, o
+      else
+        Api.get? @db, o
+      end
+    end
 
-      V.from to_h r, :value
+    def has_key?(key : K)
+      get_o?(key) != nil
+    end
+
+    def []?(key : K) : V?
+      o = get_o? key
+      return nil unless o
+      V.from to_h o, :value
     end
 
     def from(key : K, order : String = ">=", &)
