@@ -13,17 +13,17 @@ module Sophia
 
   class Api
     def self.env
-      raise Exception.new "sp_env returned NULL" if (r = LibSophia.env) == P.null
+      raise Exception.new "sp_env() returned NULL" if (r = LibSophia.env) == P.null
       r
     end
 
     def self.set(o : P, path : String, value : Value | Array(String))
       if value.is_a? String
         e = LibSophia.setstring o, path, value, value.size
-        raise Exception.new "sp_setstring returned #{e} for {#{path}, #{value}}" unless e == 0
+        raise Exception.new "sp_setstring(#{o}, #{path}, #{value}, #{value.size}) returned #{e}" unless e == 0
       elsif value.is_a? Int64
         e = LibSophia.setint o, path, value
-        raise Exception.new "sp_setint returned #{e} for (#{path}, #{value})" unless e == 0
+        raise Exception.new "sp_setint(#{o}, #{path}, #{value}) returned #{e}" unless e == 0
       elsif value.is_a? Array(String)
         value.each { |value| set o, path, value }
       end
@@ -56,12 +56,12 @@ module Sophia
 
     def self.open(o : P)
       e = LibSophia.open o
-      raise Exception.new "sp_open returned #{e}" unless e == 0
+      raise Exception.new "sp_open(#{o}) returned #{e}" unless e == 0
     end
 
     def self.document(db : P)
       r = LibSophia.document db
-      raise Exception.new "sp_document returned NULL" if r == P.null
+      raise Exception.new "sp_document(#{db}) returned NULL" if r == P.null
       r
     end
 
@@ -74,7 +74,7 @@ module Sophia
 
     def self.set(o : P, doc : P)
       e = CommitResult.new LibSophia.set o, doc
-      raise Exception.new "sp_set returned #{e}" unless e == CommitResult::Success
+      raise Exception.new "sp_set(#{o}, #{doc}) returned #{e}" unless e == CommitResult::Success
     end
 
     def self.get?(o : P, doc : P)
@@ -85,29 +85,29 @@ module Sophia
 
     def self.delete(o : P, doc : P)
       e = CommitResult.new LibSophia.delete o, doc
-      raise Exception.new "sp_delete returned #{e}" unless e == CommitResult::Success
+      raise Exception.new "sp_delete(#{o}, #{doc}) returned #{e}" unless e == CommitResult::Success
     end
 
     def self.cursor(env : P)
       r = LibSophia.cursor env
-      raise Exception.new "sp_cursor returned NULL" if r == P.null
+      raise Exception.new "sp_cursor(#{env}) returned NULL" if r == P.null
       r
     end
 
     def self.begin(env : P)
       tx = LibSophia.begin env
-      raise Exception.new "sp_begin returned NULL" if tx == P.null
+      raise Exception.new "sp_begin(#{env}) returned NULL" if tx == P.null
       tx
     end
 
     protected def self.commit(tx : P)
       e = CommitResult.new LibSophia.commit tx
-      raise Exception.new "sp_commit returned #{e}" unless e == CommitResult::Success
+      raise Exception.new "sp_commit(#{tx}) returned #{e}" unless e == CommitResult::Success
     end
 
     protected def self.destroy(o : P)
       e = LibSophia.destroy o
-      raise Exception.new "sp_destroy returned #{e}" unless (e) == 0
+      raise Exception.new "sp_destroy(#{o}) returned #{e}" unless (e) == 0
     end
   end
 
@@ -178,13 +178,8 @@ module Sophia
 
     def transaction(&)
       tx = Api.begin @env
-      transaction = Transaction.new tx
-      yield transaction
+      yield Transaction.new tx
       Api.commit tx
-    end
-
-    protected def database?(name : String)
-      Api.getobject? @env, "db.#{name}"
     end
 
     def finalize
@@ -206,21 +201,17 @@ module Sophia
 
     def initialize(@environment : Environment, @name : String, @transaction = nil)
       @scheme = environment.schemes[name]
-      raise Exception.new "Scheme from environment config #{@scheme[:key]} do not match template argument #{K}" if @scheme[:key] != ntt2ht(K)
-      raise Exception.new "Scheme from environment config #{@scheme[:value]} do not match template argument #{V}" if @scheme[:value] != ntt2ht(V)
-      @db = environment.database?(name).not_nil!
+      raise Exception.new "Scheme from environment config #{@scheme[:key]} do not match template argument #{K} for database #{name}" if @scheme[:key] != ntt2ht(K)
+      raise Exception.new "Scheme from environment config #{@scheme[:value]} do not match template argument #{V} for database #{name}" if @scheme[:value] != ntt2ht(V)
+      @db = Api.getobject?(@environment.env, "db.#{name}").not_nil!
     end
 
     def in(transaction : Transaction)
       Database(K, V).new @environment, @name, transaction
     end
 
-    protected def to_h(payload : K | V)
-      payload.to_h.map { |k, v| {k.to_s, v} }.to_h
-    end
-
     protected def set(o : P, payload : K | V)
-      Api.set o, to_h payload
+      Api.set o, payload.to_h.map { |k, v| {k.to_s, v} }.to_h
     end
 
     def []=(key : K, value : V)
