@@ -135,7 +135,7 @@ module Sophia
         kscheme = "db.#{db.name}.scheme"
         (db.scheme[:key].keys + db.scheme[:value].keys).each { |value| Api.set @env, kscheme, value }
 
-        db.scheme[:key].each_with_index { |nv, i| Api.set @env, "#{kscheme}.#{nv[0]}", "#{@@type_to_s[nv[1]]},key(#{i})" }
+        db.scheme[:key].to_a.sort_by { |k, _| k }.each_with_index { |nv, i| Api.set @env, "#{kscheme}.#{nv[0]}", "#{@@type_to_s[nv[1]]},key(#{i})" }
         db.scheme[:value].each { |n, v| Api.set @env, "#{kscheme}.#{n}", @@type_to_s[v] }
 
         db.settings.each { |n, v| Api.set @env, "db.#{db.name}.#{n}", v }
