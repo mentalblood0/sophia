@@ -1,9 +1,10 @@
-require "./macros"
+require "log"
 
+require "./macros"
 require "./LibSophia.cr"
 
 module Sophia
-  alias Payload = Hash(String, Value | Array(String))
+  alias H = Hash(String, Value | Array(String))
   alias P = Pointer(Void)
   alias Key = String | Int64
   alias Value = String | Int64 | UInt64 | UInt32 | UInt16 | UInt8 | Nil
@@ -18,6 +19,7 @@ module Sophia
     end
 
     def self.set(o : P, path : String, value : Value | Array(String))
+      Log.debug { "set #{o}, #{path}, #{value}" }
       if value.is_a? String
         e = LibSophia.setstring o, path, value, value.size
         raise Exception.new "sp_setstring(#{o}, #{path}, #{value}, #{value.size}) returned #{e}" unless e == 0
@@ -30,7 +32,7 @@ module Sophia
       end
     end
 
-    def self.set(o : P, payload : Payload)
+    def self.set(o : P, payload : H)
       payload.each { |name, value| set o, name, value }
     end
 
@@ -112,57 +114,36 @@ module Sophia
     end
   end
 
-  alias Multipart = Hash(String, Class)
+  alias Multipart = Hash(String, String.class | UInt64.class | UInt32.class | UInt16.class | UInt8.class)
   alias Scheme = {key: Multipart, value: Multipart}
 
-  def self.scheme_conf(db_name : String, key : Multipart, value : Multipart)
-    type_to_s = {String => "string",
-                 UInt64 => "u64",
-                 UInt32 => "u32",
-                 UInt16 => "u16",
-                 UInt8  => "u8"}
-    r = {} of String => (String | Array(String))
-
-    kscheme = "db.#{db_name}.scheme"
-    r[kscheme] = key.keys + value.keys
-
-    key.each_with_index { |nv, i| r["#{kscheme}.#{nv[0]}"] = "#{type_to_s[nv[1]]},key(#{i})" }
-    value.each { |n, v| r["#{kscheme}.#{n}"] = type_to_s[v] }
-    r
-  end
-
   class Environment
-    getter env : P
-    getter schemes = {} of String => Scheme
+    @@type_to_s = {String => "string",
+                   UInt64 => "u64",
+                   UInt32 => "u32",
+                   UInt16 => "u16",
+                   UInt8  => "u8"}
 
-    def initialize(settings : Payload)
+    getter env : P
+
+    def initialize(settings : H, *dbs)
       @env = Api.env
+
+      dbs.each do |db|
+        Api.set @env, "db", db.name
+        kscheme = "db.#{db.name}.scheme"
+        (db.scheme[:key].keys + db.scheme[:value].keys).each { |value| Api.set @env, kscheme, value }
+
+        db.scheme[:key].each_with_index { |nv, i| Api.set @env, "#{kscheme}.#{nv[0]}", "#{@@type_to_s[nv[1]]},key(#{i})" }
+        db.scheme[:value].each { |n, v| Api.set @env, "#{kscheme}.#{n}", @@type_to_s[v] }
+
+        db.settings.each { |n, v| Api.set @env, "db.#{db.name}.#{n}", v }
+      end
+
       Api.set @env, settings
       Api.open @env
-      settings.each do |skey, svalue|
-        next unless svalue.is_a? String
-        next unless skey_match = skey.match /^db\.(\w+)\.scheme\.(\w+)$/
 
-        db = skey_match[1]
-        key = skey_match[2]
-        @schemes[db] = {key: Multipart.new, value: Multipart.new} unless @schemes[db]?
-
-        next unless svalue_match = svalue.match /^(\w+)(,key\(\d+\))?$/
-        type = {"string"  => String,
-                "u64"     => UInt64,
-                "u64_rev" => UInt64,
-                "u32"     => UInt32,
-                "u32_rev" => UInt32,
-                "u16"     => UInt16,
-                "u16_rev" => UInt16,
-                "u8"      => UInt8,
-                "u8_rev"  => UInt8}[svalue_match[1]]
-        if svalue_match[2]?
-          @schemes[db]["key"][key] = type
-        else
-          @schemes[db]["value"][key] = type
-        end
-      end
+      dbs.each { |db| db.set_environment self }
     end
 
     def []=(path : String, value : Value)
@@ -195,20 +176,33 @@ module Sophia
     end
   end
 
-  struct Database(K, V)
-    @scheme : Scheme
-    @db : P
-    @transaction : Transaction?
+  class Database(K, V)
+    getter scheme : Scheme = {key: Multipart.new, value: Multipart.new}
+    getter name : String
+    getter settings : H
 
-    def initialize(@environment : Environment, @name : String, @transaction = nil)
-      @scheme = environment.schemes[name]
-      raise Exception.new "Scheme from environment config #{@scheme[:key]} do not match template argument #{K} for database #{name}" if @scheme[:key] != ntt2ht(K)
-      raise Exception.new "Scheme from environment config #{@scheme[:value]} do not match template argument #{V} for database #{name}" if @scheme[:value] != ntt2ht(V)
-      @db = Api.getobject?(@environment.env, "db.#{name}").not_nil!
+    @transaction : Transaction?
+    @environment : Environment?
+    @db : P?
+
+    def initialize(@name, @settings = H.new)
+      ntt2ht(K).each { |name, type| @scheme[:key][name] = type }
+      ntt2ht(V).each { |name, type| @scheme[:value][name] = type }
+    end
+
+    protected def set_environment(environment : Environment)
+      @environment = environment
+      @db = Api.getobject?(@environment.not_nil!.env, "db.#{name}").not_nil!
+    end
+
+    protected def set_transaction(transaction : Transaction)
+      @transaction = transaction
     end
 
     def in(transaction : Transaction)
-      Database(K, V).new @environment, @name, transaction
+      r = self.dup
+      r.set_transaction transaction
+      r
     end
 
     protected def set(o : P, payload : K | V)
@@ -216,13 +210,13 @@ module Sophia
     end
 
     def []=(key : K, value : V)
-      o = Api.document @db
+      o = Api.document @db.not_nil!
       set o, key
       set o, value
       if @transaction
         Api.set @transaction.not_nil!.tr, o
       else
-        Api.set @db, o
+        Api.set @db.not_nil!, o
       end
     end
 
@@ -250,13 +244,13 @@ module Sophia
     end
 
     protected def get_o?(key : K)
-      o = Api.document @db
+      o = Api.document @db.not_nil!
       set o, key
 
       if @transaction
         Api.get? @transaction.not_nil!.tr, o
       else
-        Api.get? @db, o
+        Api.get? @db.not_nil!, o
       end
     end
 
@@ -271,8 +265,8 @@ module Sophia
     end
 
     def from(key : K, order : String = ">=", &)
-      cursor = Api.cursor @environment.env
-      o = Api.document @db
+      cursor = Api.cursor @environment.not_nil!.env
+      o = Api.document @db.not_nil!
       set o, key
       while o = Api.get? cursor, o
         yield ({K.from(to_h o, :key), V.from(to_h o, :value)})
@@ -281,12 +275,12 @@ module Sophia
     end
 
     def delete(key : K)
-      o = Api.document @db
+      o = Api.document @db.not_nil!
       set o, key
       if @transaction
         Api.delete @transaction.not_nil!.tr, o
       else
-        Api.delete @db, o
+        Api.delete @db.not_nil!, o
       end
     end
   end

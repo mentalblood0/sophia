@@ -1,4 +1,3 @@
-require "log"
 require "wait_group"
 require "spec"
 
@@ -8,16 +7,10 @@ Log.setup :debug
 
 describe Sophia do
   describe "Database" do
-    env = Sophia::Environment.new({
-      "sophia.path"              => "/tmp/sophia",
-      "db"                       => "test",
-      "db.test.compression"      => "zstd",
-      "db.test.compaction.cache" => 4_i64 * 1024 * 1024 * 1024,
-    }.merge Sophia.scheme_conf("test", {"id" => UInt32}, {"url" => String,
-                                                          "state" => UInt8,
-                                                          "tags" => String}))
+    db = Sophia::Database({id: UInt32}, {url: String, state: UInt8, tags: String}).new "test", Sophia::H{"compression"      => "zstd",
+                                                                                                         "compaction.cache" => 4_i64 * 1024 * 1024 * 1024}
+    env = Sophia::Environment.new Sophia::H{"sophia.path" => "/tmp/sophia"}, db
 
-    db = Sophia::Database({id: UInt32}, {url: String, state: UInt8, tags: String}).new env, "test"
     a = Random::DEFAULT.hex 8
     b = Random::DEFAULT.hex 8
     key = {id: 1_u32}
