@@ -114,15 +114,26 @@ module Sophia
     end
   end
 
-  alias Multipart = Hash(String, String.class | UInt64.class | UInt32.class | UInt16.class | UInt8.class)
+  alias Multipart = Hash(String, Class)
   alias Scheme = {key: Multipart, value: Multipart}
 
+  alias StringOpt = String?
+  alias UInt64Opt = UInt64?
+  alias UInt32Opt = UInt32?
+  alias UInt16Opt = UInt16?
+  alias UInt8Opt = UInt8?
+
   class Environment
-    @@type_to_s = {String => "string",
-                   UInt64 => "u64",
-                   UInt32 => "u32",
-                   UInt16 => "u16",
-                   UInt8  => "u8"}
+    @@type_to_s = {String    => "string",
+                   StringOpt => "string",
+                   UInt64    => "u64",
+                   UInt64Opt => "u64",
+                   UInt32    => "u32",
+                   UInt32Opt => "u32",
+                   UInt16    => "u16",
+                   UInt16Opt => "u16",
+                   UInt8     => "u8",
+                   UInt8Opt  => "u8"}
 
     getter env : P
 
@@ -224,17 +235,17 @@ module Sophia
       result = {} of Key => Value
       @scheme[scheme_symbol].each do |sym, type|
         s = sym.to_s
-        result[s] = if type == String
+        result[s] = if (type == String) || (type == StringOpt)
                       Api.getstring? o, s
                     else
                       if v = Api.getint? o, s
-                        if type == UInt8
+                        if (type == UInt8) || (type == UInt8Opt)
                           v.to_u8
-                        elsif type == UInt16
+                        elsif (type == UInt16) || (type == UInt16Opt)
                           v.to_u16
-                        elsif type == UInt32
+                        elsif (type == UInt32) || (type == UInt32Opt)
                           v.to_u32
-                        elsif type == UInt64
+                        elsif (type == UInt64) || (type == UInt64Opt)
                           v.to_u64
                         end
                       end
