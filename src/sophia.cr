@@ -115,15 +115,15 @@ module Sophia
     end
   end
 
-  alias Multipart = Hash(String, Class)
+  alias Multipart = Hash(String, String)
   alias Scheme = {key: Multipart, value: Multipart}
 
   class Environment
-    @@type_to_s = {String => "string",
-                   UInt64 => "u64",
-                   UInt32 => "u32",
-                   UInt16 => "u16",
-                   UInt8  => "u8"}
+    @@type_to_s = {"String" => "string",
+                   "UInt64" => "u64",
+                   "UInt32" => "u32",
+                   "UInt16" => "u16",
+                   "UInt8"  => "u8"}
 
     getter env : P
 
@@ -187,8 +187,8 @@ module Sophia
     @db : P?
 
     def initialize(@name, @settings = H.new)
-      ntt2ht(K).each { |name, type| @scheme[:key][name] = type }
-      ntt2ht(V).each { |name, type| @scheme[:value][name] = type }
+      ntt2ht(K).each { |name, type| @scheme[:key][name] = type.to_s }
+      ntt2ht(V).each { |name, type| @scheme[:value][name] = type.to_s }
     end
 
     protected def set_environment(environment : Environment)
@@ -225,17 +225,17 @@ module Sophia
       result = {} of Key => Value
       @scheme[scheme_symbol].each do |sym, type|
         s = sym.to_s
-        result[s] = if type == String
+        result[s] = if type == "String"
                       Api.getstring? o, s
                     else
                       if v = Api.getint? o, s
-                        if type == UInt8
+                        if type == "UInt8"
                           v.to_u8
-                        elsif type == UInt16
+                        elsif type == "UInt16"
                           v.to_u16
-                        elsif type == UInt32
+                        elsif type == "UInt32"
                           v.to_u32
-                        elsif type == UInt64
+                        elsif type == "UInt64"
                           v.to_u64
                         end
                       end
