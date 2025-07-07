@@ -6,7 +6,7 @@ module Sophia
   alias Payload = Hash(String, Value | Array(String))
   alias P = Pointer(Void)
   alias Key = String | Int64
-  alias Value = String | Int64 | Nil
+  alias Value = String | Int64 | UInt64 | UInt32 | UInt16 | UInt8 | Nil
 
   class Exception < Exception
   end
@@ -21,11 +21,12 @@ module Sophia
       if value.is_a? String
         e = LibSophia.setstring o, path, value, value.size
         raise Exception.new "sp_setstring(#{o}, #{path}, #{value}, #{value.size}) returned #{e}" unless e == 0
-      elsif value.is_a? Int64
-        e = LibSophia.setint o, path, value
-        raise Exception.new "sp_setint(#{o}, #{path}, #{value}) returned #{e}" unless e == 0
       elsif value.is_a? Array(String)
         value.each { |value| set o, path, value }
+      elsif value.is_a? Nil
+      else
+        e = LibSophia.setint o, path, value
+        raise Exception.new "sp_setint(#{o}, #{path}, #{value}) returned #{e}" unless e == 0
       end
     end
 
@@ -227,9 +228,23 @@ module Sophia
 
     protected def to_h(o : P, scheme_symbol : Symbol)
       result = {} of Key => Value
-      @scheme[scheme_symbol].each_key do |sym|
+      @scheme[scheme_symbol].each do |sym, type|
         s = sym.to_s
-        result[s] = Api.getstring? o, s
+        result[s] = if type == String
+                      Api.getstring? o, s
+                    else
+                      if v = Api.getint? o, s
+                        if type == UInt8
+                          v.to_u8
+                        elsif type == UInt16
+                          v.to_u16
+                        elsif type == UInt32
+                          v.to_u32
+                        elsif type == UInt64
+                          v.to_u64
+                        end
+                      end
+                    end
       end
       result
     end

@@ -6,7 +6,7 @@ lib LibSophia
   fun setint = sp_setint(object : Void*, path : UInt8*, value : Int64) : Int64
   fun getobject = sp_getobject(object : Void*, path : UInt8*) : Void*
   fun getstring = sp_getstring(object : Void*, path : UInt8*, size : Int32*) : Void*
-  fun getint = sp_getint(object : Void*, path : UInt8*) : Int64
+  fun getint = sp_getint(object : Void*, path : UInt8*) : UInt64
   fun open = sp_open(object : Void*) : Int32
   fun destroy = sp_destroy(object : Void*) : Int32
   fun set = sp_set(object : Void*, document : Void*) : Int32
