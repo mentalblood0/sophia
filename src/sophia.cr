@@ -1,6 +1,5 @@
 require "log"
 
-require "./macros"
 require "./LibSophia.cr"
 
 module Sophia
@@ -19,17 +18,18 @@ module Sophia
     end
 
     def self.setint(o : P, path : String, value : UInt64 | UInt32 | UInt16 | UInt8 | Int64)
+      Log.debug { "so_setint #{o}, #{path}, #{value}" }
       e = LibSophia.setint o, path, value
       raise Exception.new "sp_setint(#{o}, #{path}, #{value}) returned #{e}" unless e == 0
     end
 
     def self.setstring(o : P, path : String, value : String)
+      Log.debug { "so_setstring(#{o}, #{path}, #{value}, #{value.size})" }
       e = LibSophia.setstring o, path, value, value.size
       raise Exception.new "sp_setstring(#{o}, #{path}, #{value}, #{value.size}) returned #{e}" unless e == 0
     end
 
     def self.set(o : P, path : String, value : Value | Array(String))
-      Log.debug { "set #{o}, #{path}, #{value}" }
       if value.is_a? String
         setstring o, path, value
       elsif value.is_a? Array(String)
@@ -123,45 +123,8 @@ module Sophia
     end
   end
 
-  enum Type
-    String
-    UInt64
-    UInt32
-    UInt16
-    UInt8
-  end
-
-  alias Multipart = Hash(String, Type)
-  alias Scheme = {key: Multipart, value: Multipart}
-
   class Environment
-    @@type_to_s = {Type::String => "string",
-                   Type::UInt64 => "u64",
-                   Type::UInt32 => "u32",
-                   Type::UInt16 => "u16",
-                   Type::UInt8  => "u8"}
-
-    getter env : P
-
-    def initialize(settings : H, *dbs)
-      @env = Api.env
-
-      dbs.each do |db|
-        Api.set @env, "db", db.name
-        kscheme = "db.#{db.name}.scheme"
-        (db.scheme[:key].keys + db.scheme[:value].keys).each { |value| Api.set @env, kscheme, value }
-
-        db.scheme[:key].to_a.sort_by { |k, _| k }.each_with_index { |nv, i| Api.set @env, "#{kscheme}.#{nv[0]}", "#{@@type_to_s[nv[1]]},key(#{i})" }
-        db.scheme[:value].each { |n, v| Api.set @env, "#{kscheme}.#{n}", @@type_to_s[v] }
-
-        db.settings.each { |n, v| Api.set @env, "db.#{db.name}.#{n}", v }
-      end
-
-      Api.set @env, settings
-      Api.open @env
-
-      dbs.each { |db| db.set_environment self }
-    end
+    getter env : Sophia::P = P.null
 
     def []=(path : String, value : Value)
       Api.set @env, path, value
@@ -177,7 +140,7 @@ module Sophia
 
     def transaction(&)
       tx = Api.begin @env
-      yield Transaction.new tx
+      yield tx
       Api.commit tx
     end
 
@@ -186,98 +149,137 @@ module Sophia
     end
   end
 
-  struct Transaction
-    getter tr : P
+  macro define_env(env_name, s)
+    class {{env_name}} < Sophia::Environment
 
-    def initialize(@tr)
+
+      @dbs : \{
+              {% for db_name, db_scheme in s %}  {{db_name}}: Sophia::Database({{db_scheme[:key]}}, {{db_scheme[:value]}}),
+              {% end %}}?
+
+      def initialize(settings : Sophia::H, dbs_settings : NamedTuple({% for db_name, _ in s %} {{db_name}}: Sophia::H, {% end %}))
+        @env = Sophia::Api.env
+
+        {% for db_name, db_scheme in s %}
+          # db
+          Sophia::Api.set @env, "db", {{db_name.stringify}}
+          {% kscheme = "db.#{db_name}.scheme" %}
+          # fields
+          {% for key, _ in db_scheme[:key].keys %}Sophia::Api.set @env, {{kscheme}}, {{key.stringify}}
+          {% end %}
+          {% for key, _ in db_scheme[:value].keys %}Sophia::Api.set @env, {{kscheme}}, {{key.stringify}}
+          {% end %}
+
+          {% type_to_s = {"String" => "string",
+                          "UInt64" => "u64",
+                          "UInt32" => "u32",
+                          "UInt16" => "u16",
+                          "UInt8"  => "u8"} %}
+          # key
+          {% for path_value in db_scheme[:key].to_a.sort_by { |k, _| k.stringify }.map_with_index { |nv, i| {"#{kscheme.id}.#{nv[0]}", "#{type_to_s[nv[1].stringify].id},key(#{i})"} } %}Sophia::Api.set @env, {{path_value[0]}}, {{path_value[1]}}
+          {% end %}
+          # value
+          {% for n, v in db_scheme[:value] %}Sophia::Api.set @env, "{{kscheme.id}}.{{n}}", {{type_to_s[nv[1].stringify]}}
+          {% end %}
+        {% end %}
+
+        Sophia::Api.set @env, settings
+        Sophia::Api.open @env
+
+        @dbs = \{
+        {% for db_name, db_scheme in s %}  {{db_name}}: Sophia::Database({{db_scheme[:key]}}, {{db_scheme[:value]}}).new(self, Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!),
+        {% end %}}
+      end
+    {% for db_name, _ in s %}
+    def {{db_name}}
+      @dbs.not_nil![:{{db_name}}]
+    end
+    {% end %}
     end
   end
 
+  macro ntt2ht(named_tuple_type)
+    {% if named_tuple_type.resolve? %}
+      {% if named_tuple_type.resolve < NamedTuple %}
+        {% hash_entries = named_tuple_type.resolve.keys.map do |key|
+             %("#{key}") + " => " + "#{named_tuple_type.resolve[key]}"
+           end %}
+        Hash{ {{hash_entries.join(", ").id}} }
+      {% else %}
+        {{ raise "Type must be a NamedTuple" }}
+      {% end %}
+    {% else %}
+      {{ raise "Type not found" }}
+    {% end %}
+  end
+
   class Database(K, V)
-    @@stype_to_type = {"String" => Type::String,
-                       "UInt64" => Type::UInt64,
-                       "UInt32" => Type::UInt32,
-                       "UInt16" => Type::UInt16,
-                       "UInt8"  => Type::UInt8}
+    property tx : P?
 
-    getter scheme : Scheme = {key: Multipart.new, value: Multipart.new}
-    getter name : String
-    getter settings : H
-
-    @transaction : Transaction?
-    @environment : Environment?
-    @db : P?
-
-    def initialize(@name, @settings = H.new)
-      ntt2ht(K).each { |name, type| @scheme[:key][name] = @@stype_to_type[type.to_s] }
-      ntt2ht(V).each { |name, type| @scheme[:value][name] = @@stype_to_type[type.to_s] }
+    def initialize(@environment : Environment, @db : P)
     end
 
-    protected def set_environment(environment : Environment)
-      @environment = environment
-      @db = Api.getobject?(@environment.not_nil!.env, "db.#{name}").not_nil!
+    macro mget(o, t)
+      \{
+        {% for key, type in t.resolve %}
+          {% if type.id.starts_with? "UInt" %}{{key.id}}: Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
+          {% elsif type.id == "String" %}{{key.id}}: Api.getstring?({{o}}, {{key.id.stringify}}).not_nil!,{% end %}
+        {% end %}
+      }
     end
 
-    protected def set_transaction(transaction : Transaction)
-      @transaction = transaction
+    macro mset(o, v, t)
+      {% for key, type in t.resolve %}
+        {% if type.id.starts_with? "UInt" %}Api.setint o, {{key.id.stringify}}, {{v}}[:{{key.id}}]
+        {% elsif type.id == "String" %}Api.setstring o, {{key.id.stringify}}, {{v}}[:{{key.id}}]{% end %}
+      {% end %}
     end
 
-    def in(transaction : Transaction)
-      r = self.dup
-      r.set_transaction transaction
-      r
+    macro iftx(method, o)
+      if @tx
+        Api.{{method}} @tx.not_nil!, {{o}}
+      else
+        Api.{{method}} @db.not_nil!, {{o}}
+      end
     end
 
     def []=(key : K, value : V)
-      o = Api.document @db.not_nil!
+      o = Api.document @db
       mset o, key, K
       mset o, value, V
-      if @transaction
-        Api.set @transaction.not_nil!.tr, o
-      else
-        Api.set @db.not_nil!, o
-      end
+      iftx set, o
     end
 
     protected def get_o?(key : K)
-      o = Api.document @db.not_nil!
+      o = Api.document @db
       mset o, key, K
-
-      if @transaction
-        Api.get? @transaction.not_nil!.tr, o
-      else
-        Api.get? @db.not_nil!, o
-      end
+      iftx get?, o
     end
 
     def has_key?(key : K)
       get_o?(key) != nil
     end
 
-    def []?(key : K) : V?
+    def []?(key : K)
       o = get_o? key
       return nil unless o
       mget o, V
     end
 
     def from(key : K, order : String = ">=", &)
-      cursor = Api.cursor @environment.not_nil!.env
-      o = Api.document @db.not_nil!
+      cursor = Api.cursor @environment.env
+      o = Api.document @db
       mset o, key, K
       while o = Api.get? cursor, o
-        yield ({mget(o, K), mget(o, V)})
+        yield mget(o, K), mget(o, V)
       end
       Api.destroy cursor
     end
 
     def delete(key : K)
-      o = Api.document @db.not_nil!
+      o = Api.document @db
       mset o, key, K
-      if @transaction
-        Api.delete @transaction.not_nil!.tr, o
-      else
-        Api.delete @db.not_nil!, o
-      end
+      iftx delete, o
     end
   end
 end
