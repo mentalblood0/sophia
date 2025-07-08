@@ -124,7 +124,11 @@ module Sophia
   end
 
   class Environment
-    getter env : Sophia::P = P.null
+    getter env : P = P.null
+
+    def last_error_msg
+      Api.getstring?(@env, "sophia.error").not_nil!
+    end
 
     def []=(path : String, value : Value)
       Api.set @env, path, value
