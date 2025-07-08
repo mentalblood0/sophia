@@ -163,39 +163,43 @@ module Sophia
 
       def initialize(settings : Sophia::H, dbs_settings : NamedTuple({% for db_name, _ in s %} {{db_name}}: Sophia::H, {% end %}))
         @env = Sophia::Api.env
+        begin
+          {% for db_name, db_scheme in s %}
+            # db
+            Sophia::Api.set @env, "db", {{db_name.stringify}}
+            {% kscheme = "db.#{db_name}.scheme" %}
+            # fields
+            {% for key, _ in db_scheme[:key].keys %}Sophia::Api.set @env, {{kscheme}}, {{key.stringify}}
+            {% end %}
+            {% for key, _ in db_scheme[:value].keys %}Sophia::Api.set @env, {{kscheme}}, {{key.stringify}}
+            {% end %}
 
-        {% for db_name, db_scheme in s %}
-          # db
-          Sophia::Api.set @env, "db", {{db_name.stringify}}
-          {% kscheme = "db.#{db_name}.scheme" %}
-          # fields
-          {% for key, _ in db_scheme[:key].keys %}Sophia::Api.set @env, {{kscheme}}, {{key.stringify}}
-          {% end %}
-          {% for key, _ in db_scheme[:value].keys %}Sophia::Api.set @env, {{kscheme}}, {{key.stringify}}
+            {% type_to_s = {"String" => "string",
+                            "UInt64" => "u64",
+                            "UInt32" => "u32",
+                            "UInt16" => "u16",
+                            "UInt8"  => "u8"} %}
+            # key
+            {% for path_value in db_scheme[:key].to_a.sort_by { |k, _| k.stringify }.map_with_index { |nv, i| {"#{kscheme.id}.#{nv[0]}", "#{type_to_s[nv[1].stringify].id},key(#{i})"} } %}Sophia::Api.set @env, {{path_value[0]}}, {{path_value[1]}}
+            {% end %}
+            # value
+            {% for n, v in db_scheme[:value] %}Sophia::Api.set @env, "{{kscheme.id}}.{{n}}", {{type_to_s[nv[1].stringify]}}
+            {% end %}
+            # settings
+            dbs_settings[:{{db_name}}].each { |k, v| Sophia::Api.set @env, "db.{{db_name}}.#{k}", v }
           {% end %}
 
-          {% type_to_s = {"String" => "string",
-                          "UInt64" => "u64",
-                          "UInt32" => "u32",
-                          "UInt16" => "u16",
-                          "UInt8"  => "u8"} %}
-          # key
-          {% for path_value in db_scheme[:key].to_a.sort_by { |k, _| k.stringify }.map_with_index { |nv, i| {"#{kscheme.id}.#{nv[0]}", "#{type_to_s[nv[1].stringify].id},key(#{i})"} } %}Sophia::Api.set @env, {{path_value[0]}}, {{path_value[1]}}
-          {% end %}
-          # value
-          {% for n, v in db_scheme[:value] %}Sophia::Api.set @env, "{{kscheme.id}}.{{n}}", {{type_to_s[nv[1].stringify]}}
-          {% end %}
-          # settings
-          dbs_settings[:{{db_name}}].each { |k, v| Sophia::Api.set @env, "db.{{db_name}}.#{k}", v }
-        {% end %}
+          Sophia::Api.set @env, settings
+          Sophia::Api.open @env
 
-        Sophia::Api.set @env, settings
-        Sophia::Api.open @env
-
-        @dbs = \{
-        {% for db_name, db_scheme in s %}  {{db_name}}: Sophia::Database({{db_scheme[:key]}}, {{db_scheme[:value]}}).new(self, Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!),
-        {% end %}}
+          @dbs = \{
+          {% for db_name, db_scheme in s %}  {{db_name}}: Sophia::Database({{db_scheme[:key]}}, {{db_scheme[:value]}}).new(self, Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!),
+          {% end %}}
+        rescue ex : Sophia::Exception
+          raise Sophia::Exception "#{ex} (last error message is \"#{last_error_msg}\")"
+        end
       end
+
     {% for db_name, _ in s %}
     def {{db_name}}
       @dbs.not_nil![:{{db_name}}]
