@@ -7,45 +7,49 @@ Log.setup :debug
 
 describe Sophia do
   describe "Database" do
-    db = Sophia::Database({id: UInt32}, {url: String, state: UInt8, tags: String}).new "test", Sophia::H{"compression"      => "zstd",
-                                                                                                         "compaction.cache" => 4_i64 * 1024 * 1024 * 1024}
-    env = Sophia::Environment.new Sophia::H{"sophia.path" => "/tmp/sophia"}, db
+    opts = Sophia::H{"compression"      => "zstd",
+                     "compaction.cache" => 1_i64 * 1024 * 1024 * 1024}
+    tags = Sophia::Database({tag: String}, {type: String}).new "tag", opts
+    posts = Sophia::Database({id: UInt32}, {url: String, state: UInt8, tags: String}).new "post", opts
+    posts_by_state = Sophia::Database({_0_state: UInt8, _1_id: UInt32}, {value: String}).new "post_by_state", opts
+
+    env = Sophia::Environment.new Sophia::H{"sophia.path" => "/tmp/sophia"}, tags, posts, posts_by_state
 
     a = Random::DEFAULT.hex 8
     b = Random::DEFAULT.hex 8
-    key = {id: 1_u32}
-    value = {url: "url", state: 0_u8, tags: ""}
 
     it "sets key=value" do
-      db[key] = value
+      tags[{tag: "tag"}] = {type: "type"}
+      posts[{id: 1_u32}] = {url: "url", state: 2_u8, tags: "tags"}
     end
 
     it "check if has key" do
-      db.has_key?(key).should eq true
+      tags.has_key?({tag: "tag"}).should eq true
     end
 
     it "get value by key" do
-      db[key]?.should eq value
+      tags[{tag: "tag"}]?.should eq({type: "type"})
+      posts[{id: 1_u32}]?.should eq({url: "url", state: 2_u8, tags: "tags"})
     end
 
     it "iterate from key" do
-      db.from(key, ">=") do |k, v|
-        db[k]?.should eq v
+      tags.from({tag: "tag"}, ">=") do |k, v|
+        tags[k]?.should eq v
       end
     end
 
     it "delete key/value pair" do
-      db.delete key
-      db[key]?.should eq nil
+      tags.delete({tag: "tag"})
+      tags[{tag: "tag"}]?.should eq nil
     end
 
     it "do all the same in transaction" do
       env.transaction do |tr|
-        dbtr = db.in tr
-        db[key] = value
-        db[key]?.should eq value
-        db.delete key
-        db[key]?.should eq nil
+        tagstr = tags.in tr
+        tags[{tag: "tag"}] = {type: "type"}
+        tags[{tag: "tag"}]?.should eq({type: "type"})
+        tags.delete({tag: "tag"})
+        tags[{tag: "tag"}]?.should eq nil
       end
     end
   end

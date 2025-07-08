@@ -12,3 +12,19 @@ macro ntt2ht(named_tuple_type)
     {{ raise "Type not found" }}
   {% end %}
 end
+
+macro mget(o, t)
+  \{
+    {% for key, type in t.resolve %}
+      {% if type.id.starts_with? "UInt" %}{{key.id}}: Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
+      {% elsif type.id == "String" %}{{key.id}}: Api.getstring?({{o}}, {{key.id.stringify}}).not_nil!,{% end %}
+    {% end %}
+  }
+end
+
+macro mset(o, v, t)
+  {% for key, type in t.resolve %}
+    {% if type.id.starts_with? "UInt" %}Api.setint o, {{key.id.stringify}}, {{v}}[:{{key.id}}]
+    {% elsif type.id == "String" %}Api.setstring o, {{key.id.stringify}}, {{v}}[:{{key.id}}]{% end %}
+  {% end %}
+end

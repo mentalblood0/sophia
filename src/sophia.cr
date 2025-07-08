@@ -18,17 +18,25 @@ module Sophia
       r
     end
 
+    def self.setint(o : P, path : String, value : UInt64 | UInt32 | UInt16 | UInt8 | Int64)
+      e = LibSophia.setint o, path, value
+      raise Exception.new "sp_setint(#{o}, #{path}, #{value}) returned #{e}" unless e == 0
+    end
+
+    def self.setstring(o : P, path : String, value : String)
+      e = LibSophia.setstring o, path, value, value.size
+      raise Exception.new "sp_setstring(#{o}, #{path}, #{value}, #{value.size}) returned #{e}" unless e == 0
+    end
+
     def self.set(o : P, path : String, value : Value | Array(String))
       Log.debug { "set #{o}, #{path}, #{value}" }
       if value.is_a? String
-        e = LibSophia.setstring o, path, value, value.size
-        raise Exception.new "sp_setstring(#{o}, #{path}, #{value}, #{value.size}) returned #{e}" unless e == 0
+        setstring o, path, value
       elsif value.is_a? Array(String)
         value.each { |value| set o, path, value }
       elsif value.is_a? Nil
       else
-        e = LibSophia.setint o, path, value
-        raise Exception.new "sp_setint(#{o}, #{path}, #{value}) returned #{e}" unless e == 0
+        setint o, path, value
       end
     end
 
@@ -220,14 +228,10 @@ module Sophia
       r
     end
 
-    protected def set(o : P, payload : K | V)
-      Api.set o, payload.to_h.map { |k, v| {k.to_s, v} }.to_h
-    end
-
     def []=(key : K, value : V)
       o = Api.document @db.not_nil!
-      set o, key
-      set o, value
+      mset o, key, K
+      mset o, value, V
       if @transaction
         Api.set @transaction.not_nil!.tr, o
       else
@@ -235,32 +239,9 @@ module Sophia
       end
     end
 
-    protected def to_h(o : P, scheme_symbol : Symbol)
-      result = {} of Key => Value
-      @scheme[scheme_symbol].each do |sym, type|
-        s = sym.to_s
-        result[s] = if type == Type::String
-                      Api.getstring? o, s
-                    else
-                      if v = Api.getint? o, s
-                        if type == Type::UInt8
-                          v.to_u8
-                        elsif type == Type::UInt16
-                          v.to_u16
-                        elsif type == Type::UInt32
-                          v.to_u32
-                        elsif type == Type::UInt64
-                          v.to_u64
-                        end
-                      end
-                    end
-      end
-      result
-    end
-
     protected def get_o?(key : K)
       o = Api.document @db.not_nil!
-      set o, key
+      mset o, key, K
 
       if @transaction
         Api.get? @transaction.not_nil!.tr, o
@@ -276,22 +257,22 @@ module Sophia
     def []?(key : K) : V?
       o = get_o? key
       return nil unless o
-      V.from to_h o, :value
+      mget o, V
     end
 
     def from(key : K, order : String = ">=", &)
       cursor = Api.cursor @environment.not_nil!.env
       o = Api.document @db.not_nil!
-      set o, key
+      mset o, key, K
       while o = Api.get? cursor, o
-        yield ({K.from(to_h o, :key), V.from(to_h o, :value)})
+        yield ({mget(o, K), mget(o, V)})
       end
       Api.destroy cursor
     end
 
     def delete(key : K)
       o = Api.document @db.not_nil!
-      set o, key
+      mset o, key, K
       if @transaction
         Api.delete @transaction.not_nil!.tr, o
       else
