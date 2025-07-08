@@ -181,6 +181,8 @@ module Sophia
           # value
           {% for n, v in db_scheme[:value] %}Sophia::Api.set @env, "{{kscheme.id}}.{{n}}", {{type_to_s[nv[1].stringify]}}
           {% end %}
+          # settings
+          dbs_settings[:{{db_name}}].each { |k, v| Sophia::Api.set @env, "db.{{db_name}}.#{k}", v }
         {% end %}
 
         Sophia::Api.set @env, settings
