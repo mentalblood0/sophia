@@ -18,13 +18,13 @@ module Sophia
     end
 
     def self.setint(o : P, path : String, value : UInt64 | UInt32 | UInt16 | UInt8 | Int64)
-      Log.debug { "so_setint(#{o}, \"#{path}\", #{value})" }
+      Log.debug { "sp_setint(#{o}, \"#{path}\", #{value})" }
       e = LibSophia.setint o, path, value
       raise Exception.new "sp_setint(#{o}, #{path}, #{value}) returned #{e}" unless e == 0
     end
 
     def self.setstring(o : P, path : String, value : String)
-      Log.debug { "so_setstring(#{o}, \"#{path}\", \"#{value}\", #{value.size})" }
+      Log.debug { "sp_setstring(#{o}, \"#{path}\", \"#{value}\", #{value.size})" }
       e = LibSophia.setstring o, path, value, value.size
       raise Exception.new "sp_setstring(#{o}, #{path}, #{value}, #{value.size}) returned #{e}" unless e == 0
     end
@@ -196,7 +196,7 @@ module Sophia
           {% for db_name, db_scheme in s %}  {{db_name}}: Sophia::Database({{db_scheme[:key]}}, {{db_scheme[:value]}}).new(self, Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!),
           {% end %}}
         rescue ex : Sophia::Exception
-          raise Sophia::Exception "#{ex} (last error message is \"#{last_error_msg}\")"
+          raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
         end
       end
 
@@ -209,18 +209,10 @@ module Sophia
   end
 
   macro ntt2ht(named_tuple_type)
-    {% if named_tuple_type.resolve? %}
-      {% if named_tuple_type.resolve < NamedTuple %}
-        {% hash_entries = named_tuple_type.resolve.keys.map do |key|
-             %("#{key}") + " => " + "#{named_tuple_type.resolve[key]}"
-           end %}
-        Hash{ {{hash_entries.join(", ").id}} }
-      {% else %}
-        {{ raise "Type must be a NamedTuple" }}
-      {% end %}
-    {% else %}
-      {{ raise "Type not found" }}
-    {% end %}
+    {% hash_entries = named_tuple_type.resolve.keys.map do |key|
+         %("#{key}") + " => " + "#{named_tuple_type.resolve[key]}"
+       end %}
+    Hash{ {{hash_entries.join(", ").id}} }
   end
 
   class Database(K, V)
