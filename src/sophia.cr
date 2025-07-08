@@ -18,13 +18,13 @@ module Sophia
     end
 
     def self.setint(o : P, path : String, value : UInt64 | UInt32 | UInt16 | UInt8 | Int64)
-      Log.debug { "so_setint #{o}, #{path}, #{value}" }
+      Log.debug { "so_setint(#{o}, \"#{path}\", #{value})" }
       e = LibSophia.setint o, path, value
       raise Exception.new "sp_setint(#{o}, #{path}, #{value}) returned #{e}" unless e == 0
     end
 
     def self.setstring(o : P, path : String, value : String)
-      Log.debug { "so_setstring(#{o}, #{path}, #{value}, #{value.size})" }
+      Log.debug { "so_setstring(#{o}, \"#{path}\", \"#{value}\", #{value.size})" }
       e = LibSophia.setstring o, path, value, value.size
       raise Exception.new "sp_setstring(#{o}, #{path}, #{value}, #{value.size}) returned #{e}" unless e == 0
     end
