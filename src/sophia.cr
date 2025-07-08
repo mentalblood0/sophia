@@ -183,7 +183,7 @@ module Sophia
             {% for path_value in db_scheme[:key].to_a.sort_by { |k, _| k.stringify }.map_with_index { |nv, i| {"#{kscheme.id}.#{nv[0]}", "#{type_to_s[nv[1].stringify].id},key(#{i})"} } %}Sophia::Api.set @env, {{path_value[0]}}, {{path_value[1]}}
             {% end %}
             # value
-            {% for n, v in db_scheme[:value] %}Sophia::Api.set @env, "{{kscheme.id}}.{{n}}", {{type_to_s[nv[1].stringify]}}
+            {% for n, v in db_scheme[:value] %}Sophia::Api.set @env, "{{kscheme.id}}.{{n}}", {{type_to_s[v.stringify]}}
             {% end %}
             # settings
             dbs_settings[:{{db_name}}].each { |k, v| Sophia::Api.set @env, "db.{{db_name}}.#{k}", v }
