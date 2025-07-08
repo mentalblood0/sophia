@@ -115,15 +115,23 @@ module Sophia
     end
   end
 
-  alias Multipart = Hash(String, String)
+  enum Type
+    String
+    UInt64
+    UInt32
+    UInt16
+    UInt8
+  end
+
+  alias Multipart = Hash(String, Type)
   alias Scheme = {key: Multipart, value: Multipart}
 
   class Environment
-    @@type_to_s = {"String" => "string",
-                   "UInt64" => "u64",
-                   "UInt32" => "u32",
-                   "UInt16" => "u16",
-                   "UInt8"  => "u8"}
+    @@type_to_s = {Type::String => "string",
+                   Type::UInt64 => "u64",
+                   Type::UInt32 => "u32",
+                   Type::UInt16 => "u16",
+                   Type::UInt8  => "u8"}
 
     getter env : P
 
@@ -178,6 +186,12 @@ module Sophia
   end
 
   class Database(K, V)
+    @@stype_to_type = {"String" => Type::String,
+                       "UInt64" => Type::UInt64,
+                       "UInt32" => Type::UInt32,
+                       "UInt16" => Type::UInt16,
+                       "UInt8"  => Type::UInt8}
+
     getter scheme : Scheme = {key: Multipart.new, value: Multipart.new}
     getter name : String
     getter settings : H
@@ -187,8 +201,8 @@ module Sophia
     @db : P?
 
     def initialize(@name, @settings = H.new)
-      ntt2ht(K).each { |name, type| @scheme[:key][name] = type.to_s }
-      ntt2ht(V).each { |name, type| @scheme[:value][name] = type.to_s }
+      ntt2ht(K).each { |name, type| @scheme[:key][name] = @@stype_to_type[type.to_s] }
+      ntt2ht(V).each { |name, type| @scheme[:value][name] = @@stype_to_type[type.to_s] }
     end
 
     protected def set_environment(environment : Environment)
@@ -225,17 +239,17 @@ module Sophia
       result = {} of Key => Value
       @scheme[scheme_symbol].each do |sym, type|
         s = sym.to_s
-        result[s] = if type == "String"
+        result[s] = if type == Type::String
                       Api.getstring? o, s
                     else
                       if v = Api.getint? o, s
-                        if type == "UInt8"
+                        if type == Type::UInt8
                           v.to_u8
-                        elsif type == "UInt16"
+                        elsif type == Type::UInt16
                           v.to_u16
-                        elsif type == "UInt32"
+                        elsif type == Type::UInt32
                           v.to_u32
-                        elsif type == "UInt64"
+                        elsif type == Type::UInt64
                           v.to_u64
                         end
                       end
