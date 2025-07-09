@@ -51,11 +51,13 @@ describe Sophia do
     it "check if has key" do
       env.tags.has_key?(tk).should eq true
       env.posts.has_key?(pk).should eq true
+      env.states.has_key?(sk).should eq true
     end
 
     it "get value by key" do
       env.tags[tk]?.should eq tv
       env.posts[pk]?.should eq pv
+      env.states[sk]?.should eq nil
     end
 
     it "iterate from key" do
@@ -69,11 +71,18 @@ describe Sophia do
       env.tags[tk]?.should eq nil
       env.posts.delete pk
       env.posts[pk]?.should eq nil
+
+      env.states.has_key?(sk).should eq true
+      env.states[sk]?.should eq nil
+      env.states.delete sk
+      env.states.has_key?(sk).should eq false
+      env.states[sk]?.should eq nil
     end
 
-    it "do all the same in transaction" do
+    it "perform operations in transaction" do
       env.transaction do |tx|
         ttags = env.tags.dup
+
         ttags.tx = tx
         ttags[tk] = tv
         ttags[tk]?.should eq tv

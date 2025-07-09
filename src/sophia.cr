@@ -252,17 +252,21 @@ module Sophia
     end
 
     macro mget(o, t)
-      \{
-        {% for key, type in t.resolve %}
-          {% if type.id.starts_with? "UInt" %}{{key.id}}: Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
-          {% elsif type.id == "String" %}{{key.id}}: Api.getstring?({{o}}, {{key.id.stringify}}).not_nil!,
-          {% else %}{{key.id}}: {{type}}.new Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}},{% end %}
-        {% end %}
-      }
+      {% if t.resolve == Nil %}
+        nil
+      {% else %}
+        \{
+          {% for key, type in t.resolve %}
+            {% if type.id.starts_with? "UInt" %}{{key.id}}: Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
+            {% elsif type.id == "String" %}{{key.id}}: Api.getstring?({{o}}, {{key.id.stringify}}).not_nil!,
+            {% else %}{{key.id}}: {{type}}.new Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}},{% end %}
+          {% end %}
+        }
+      {% end %}
     end
 
     macro mset(o, v, t)
-      {% if t != Nil %}
+      {% if t.resolve != Nil %}
         {% for key, type in t.resolve %}
           {% if type.id.starts_with? "UInt" %}Api.setint o, {{key.id.stringify}}, {{v}}[:{{key.id}}]
           {% elsif type.id == "String" %}Api.setstring o, {{key.id.stringify}}, {{v}}[:{{key.id}}]
