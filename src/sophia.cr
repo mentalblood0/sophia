@@ -230,11 +230,50 @@ module Sophia
         end
       end
 
-    {% for db_name, _ in s %}
-    def {{db_name}}
-      @dbs.not_nil![:{{db_name}}]
-    end
-    {% end %}
+      {% for db_name, db_scheme in s %}
+        {% key_keys = db_scheme[:key].keys %}
+        {% key_types = db_scheme[:key].values %}
+  
+        {% if db_scheme[:value] %}
+          {% value_keys = db_scheme[:value].keys %}
+          {% value_types = db_scheme[:value].values %}
+        {% else %}
+          {% value_keys = [] of Symbol %}
+          {% value_types = [] of Symbol %}
+        {% end %}
+  
+        {% for key in value_keys %}
+          {% if key_keys.includes?(key) %}
+            {% raise "Duplicate key #{key} when joining named tuples" %}
+          {% end %}
+        {% end %}
+  
+      def <<(document : {
+        {% for key, i in key_keys %}
+          {{key}}: {{key_types[i]}},
+        {% end %}
+        {% for key, i in value_keys %}
+          {{key}}: {{value_types[i]}},
+        {% end %}
+      })
+        @dbs.not_nil![:{{db_name}}][{
+        {% for key, i in key_keys %}
+          {{key}}: document[:{{key}}],
+        {% end %}}] = {% if db_scheme[:value] %}{
+          {% for key, i in value_keys %}
+            {{key}}: document[:{{key}}],
+          {% end %}}
+        {% else %}
+        nil
+        {% end %}
+      end
+      {% end %}
+
+      {% for db_name, _ in s %}
+      def {{db_name}}
+        @dbs.not_nil![:{{db_name}}]
+      end
+      {% end %}
     end
   end
 
@@ -247,8 +286,9 @@ module Sophia
 
   class Database(K, V)
     property tx : P?
+    getter db : P
 
-    def initialize(@environment : Environment, @db : P)
+    def initialize(@environment : Environment, @db)
     end
 
     macro mget(o, t)

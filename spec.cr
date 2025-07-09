@@ -38,14 +38,24 @@ describe Sophia do
 
     tk = {name: "tag"}
     tv = {type: "type"}
+    td = {name: "tag", type: "type"}
+
     pk = {_0_host: "host", _1_id: 1_u32}
     pv = {url: "url", tags: "tags", value_state: ValueState::B}
+    pd = {_0_host: "host", _1_id: 1_u32, url: "url", tags: "tags", value_state: ValueState::B}
+
     sk = {_0_state: State::Rejected, _1_post_id: 4_u32}
+    sd = sk
 
     it "sets key=value" do
-      env.tags[tk] = tv
-      env.posts[pk] = pv
-      env.states[sk] = nil
+      env.tags[tk] = tv # key/value syntax
+      env << td         # document syntax
+
+      env.posts[pk] = pv # key/value syntax
+      env << pd          # document syntax
+
+      env.states[sk] = nil # key/value syntax
+      env << sd            # document syntax
     end
 
     it "check if has key" do
