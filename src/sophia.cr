@@ -158,7 +158,7 @@ module Sophia
 
 
       @dbs : \{
-              {% for db_name, db_scheme in s %}  {{db_name}}: Sophia::Database({{db_scheme[:key]}}, {{db_scheme[:value]}}),
+              {% for db_name, db_scheme in s %}  {{db_name}}: Sophia::Database({{db_scheme[:key]}}, {% if db_scheme[:value] %}{{db_scheme[:value]}}{% else %}Nil{% end %}),
               {% end %}}?
 
       def initialize(settings : Sophia::H, dbs_settings : NamedTuple({% for db_name, _ in s %} {{db_name}}: Sophia::H, {% end %}))
@@ -172,8 +172,8 @@ module Sophia
             # fields
             {% for key, _ in db_scheme[:key].keys %}Sophia::Api.set @env, {{kscheme}}, {{key.stringify}}
             {% end %}
-            {% for key, _ in db_scheme[:value].keys %}Sophia::Api.set @env, {{kscheme}}, {{key.stringify}}
-            {% end %}
+            {% if db_scheme[:value] %}{% for key, _ in db_scheme[:value].keys %}Sophia::Api.set @env, {{kscheme}}, {{key.stringify}}
+            {% end %}{% end %}
 
             {% type_to_s = {"String" => "string",
                             "UInt64" => "u64",
@@ -201,16 +201,18 @@ module Sophia
             {% end %}
             
             # value
-            {% for path, value in db_scheme[:value] %}
-              {% if type_to_s.has_key? value.stringify %}
-            Sophia::Api.set @env, "{{kscheme.id}}.{{path}}", "{{type_to_s[value.stringify].id}}"
-              {% else %}
-                {% crystal_type_s = value.resolve.constant(value.resolve.constants.first).kind.id.stringify %}
-                {% db_type_s = enum_type_to_s[crystal_type_s].id %}
-                {% if db_type_s == "nil" %}{% raise "Sophia does not support underyling type #{crystal_type_s} of enum #{value}" %}{% end %}
+            {% if db_scheme[:value] %}
+              {% for path, value in db_scheme[:value] %}
+                {% if type_to_s.has_key? value.stringify %}
+              Sophia::Api.set @env, "{{kscheme.id}}.{{path}}", "{{type_to_s[value.stringify].id}}"
+                {% else %}
+                  {% crystal_type_s = value.resolve.constant(value.resolve.constants.first).kind.id.stringify %}
+                  {% db_type_s = enum_type_to_s[crystal_type_s].id %}
+                  {% if db_type_s == "nil" %}{% raise "Sophia does not support underyling type #{crystal_type_s} of enum #{value}" %}{% end %}
             Sophia::Api.set @env, "{{kscheme.id}}.{{path}}", "{{db_type_s}}"
+                {% end %}
+                {% i += 1 %}
               {% end %}
-              {% i += 1 %}
             {% end %}
 
             # settings
@@ -221,7 +223,7 @@ module Sophia
           Sophia::Api.open @env
 
           @dbs = \{
-          {% for db_name, db_scheme in s %}  {{db_name}}: Sophia::Database({{db_scheme[:key]}}, {{db_scheme[:value]}}).new(self, Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!),
+          {% for db_name, db_scheme in s %}  {{db_name}}: Sophia::Database({{db_scheme[:key]}}, {% if db_scheme[:value] %}{{db_scheme[:value]}}{% else %}Nil{% end %}).new(self, Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!),
           {% end %}}
         rescue ex : Sophia::Exception
           raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
@@ -260,10 +262,12 @@ module Sophia
     end
 
     macro mset(o, v, t)
-      {% for key, type in t.resolve %}
-        {% if type.id.starts_with? "UInt" %}Api.setint o, {{key.id.stringify}}, {{v}}[:{{key.id}}]
-        {% elsif type.id == "String" %}Api.setstring o, {{key.id.stringify}}, {{v}}[:{{key.id}}]
-        {% else %}Api.setint o, {{key.id.stringify}}, {{v}}[:{{key.id}}].value{% end %}
+      {% if t != Nil %}
+        {% for key, type in t.resolve %}
+          {% if type.id.starts_with? "UInt" %}Api.setint o, {{key.id.stringify}}, {{v}}[:{{key.id}}]
+          {% elsif type.id == "String" %}Api.setstring o, {{key.id.stringify}}, {{v}}[:{{key.id}}]
+          {% else %}Api.setint o, {{key.id.stringify}}, {{v}}[:{{key.id}}].value{% end %}
+        {% end %}
       {% end %}
     end
 

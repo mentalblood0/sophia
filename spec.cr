@@ -20,11 +20,12 @@ end
 Sophia.define_env TestEnv, {tags: {key: {name: String},
                                    value: {type: String}},
                             posts: {key: {_0_host: String,
-                                          _1_state: State,
-                                          _2_id: UInt32},
+                                          _1_id: UInt32},
                                     value: {url: String,
                                             tags: String,
-                                            value_state: ValueState}}}
+                                            value_state: ValueState}},
+                            states: {key: {_0_state: State,
+                                           _1_post_id: UInt32}}}
 
 describe Sophia do
   describe "exp" do
@@ -33,16 +34,18 @@ describe Sophia do
   describe "Database" do
     opts = Sophia::H{"compression"      => "zstd",
                      "compaction.cache" => 1_i64 * 1024 * 1024 * 1024}
-    env = TestEnv.new Sophia::H{"sophia.path" => "/tmp/sophia"}, {tags: opts, posts: opts}
+    env = TestEnv.new Sophia::H{"sophia.path" => "/tmp/sophia"}, {tags: opts, posts: opts, states: opts}
 
     tk = {name: "tag"}
     tv = {type: "type"}
-    pk = {_0_host: "host", _1_state: State::Missing, _2_id: 1_u32}
+    pk = {_0_host: "host", _1_id: 1_u32}
     pv = {url: "url", tags: "tags", value_state: ValueState::B}
+    sk = {_0_state: State::Rejected, _1_post_id: 4_u32}
 
     it "sets key=value" do
       env.tags[tk] = tv
       env.posts[pk] = pv
+      env.states[sk] = nil
     end
 
     it "check if has key" do
