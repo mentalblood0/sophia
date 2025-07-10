@@ -124,13 +124,14 @@ module Sophia
   end
 
   class Environment
-    getter env : P = P.null
+    property tx : Sophia::P?
+    @env : P = P.null
 
     def last_error_msg
       Api.getstring?(@env, "sophia.error").not_nil!
     end
 
-    def []=(path : String, value : Value)
+    def set(path : String, value : Value)
       Api.set @env, path, value
     end
 
@@ -143,8 +144,9 @@ module Sophia
     end
 
     def transaction(&)
+      d = self.dup
       tx = Api.begin @env
-      yield tx
+      yield d
       Api.commit tx
     end
 
@@ -153,13 +155,13 @@ module Sophia
     end
   end
 
+  macro mget(o, t)
+  end
+
   macro define_env(env_name, s)
     class {{env_name}} < Sophia::Environment
-
-
-      @dbs : \{
-              {% for db_name, db_scheme in s %}  {{db_name}}: Sophia::Database({{db_scheme[:key]}}, {% if db_scheme[:value] %}{{db_scheme[:value]}}{% else %}Nil{% end %}),
-              {% end %}}?
+      {% for db_name, _ in s %}@{{db_name}} : Sophia::P = Sophia::P.null
+      {% end %}
 
       def initialize(settings : Sophia::H, dbs_settings : NamedTuple({% for db_name, _ in s %} {{db_name}}: Sophia::H, {% end %}))
         @env = Sophia::Api.env
@@ -222,144 +224,112 @@ module Sophia
           Sophia::Api.set @env, settings
           Sophia::Api.open @env
 
-          @dbs = \{
-          {% for db_name, db_scheme in s %}  {{db_name}}: Sophia::Database({{db_scheme[:key]}}, {% if db_scheme[:value] %}{{db_scheme[:value]}}{% else %}Nil{% end %}).new(self, Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!),
-          {% end %}}
+          {% for db_name in s %}@{{db_name}} = Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!
+          {% end %}
         rescue ex : Sophia::Exception
           raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
         end
       end
 
       {% for db_name, db_scheme in s %}
-        {% key_keys = db_scheme[:key].keys %}
-        {% key_types = db_scheme[:key].values %}
-  
+        {% k = db_scheme[:key] %}
         {% if db_scheme[:value] %}
-          {% value_keys = db_scheme[:value].keys %}
-          {% value_types = db_scheme[:value].values %}
+          {% v = db_scheme[:value] %}
         {% else %}
-          {% value_keys = [] of Symbol %}
-          {% value_types = [] of Symbol %}
+          {% v = {} of Symbol => Type %}
         {% end %}
-  
-        {% for key in value_keys %}
-          {% if key_keys.includes?(key) %}
-            {% raise "Duplicate key #{key} when joining named tuples" %}
+
+        {% for key in v.keys %}
+          {% if k.keys.includes?(key) %}
+            {% raise "Duplicate key #{key} in key and value scheme parts for #{db_name}" %}
           {% end %}
         {% end %}
-  
+
       def <<(document : {
-        {% for key, i in key_keys %}
-          {{key}}: {{key_types[i]}},
-        {% end %}
-        {% for key, i in value_keys %}
-          {{key}}: {{value_types[i]}},
-        {% end %}
+        {% for key, type in k %}{{key}}: {{type}},{% end %}
+        {% for key, type in v %}{{key}}: {{type}},{% end %}
       })
-        @dbs.not_nil![:{{db_name}}][{
-        {% for key, i in key_keys %}
-          {{key}}: document[:{{key}}],
-        {% end %}}] = {% if db_scheme[:value] %}{
-          {% for key, i in value_keys %}
-            {{key}}: document[:{{key}}],
-          {% end %}}
-        {% else %}
-        nil
+        o = Sophia::Api.document @{{db_name}}
+        {% for x in [k, v] %}
+          {% for key, type in x %}
+            {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, document[:{{key.id}}]
+            {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, document[:{{key.id}}]
+            {% else %}Sophia::Api.setint o, {{key.id.stringify}}, document[:{{key.id}}].value{% end %}
+          {% end %}
         {% end %}
+        Sophia::Api.set @{{db_name}}, o
+        self
       end
-      {% end %}
 
-      {% for db_name, _ in s %}
-      def {{db_name}}
-        @dbs.not_nil![:{{db_name}}]
+      def has_key?(key : { {% for key, type in k %}{{key}}: {{type}},{% end %} })
+        o = Sophia::Api.document @{{db_name}}
+        {% for key, type in k %}
+          {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
+          {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
+          {% else %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}].value{% end %}
+        {% end %}
+        Sophia::Api.get?(@{{db_name}}, o) != nil
       end
-      {% end %}
-    end
-  end
 
-  macro ntt2ht(named_tuple_type)
-    {% hash_entries = named_tuple_type.resolve.keys.map do |key|
-         %("#{key}") + " => " + "#{named_tuple_type.resolve[key]}"
-       end %}
-    Hash{ {{hash_entries.join(", ").id}} }
-  end
-
-  class Database(K, V)
-    property tx : P?
-    getter db : P
-
-    def initialize(@environment : Environment, @db)
-    end
-
-    macro mget(o, t)
-      {% if t.resolve == Nil %}
-        nil
-      {% else %}
+        {% if db_scheme[:value] %}
+      def []?(key : { {% for key, type in k %}{{key}}: {{type}},{% end %} })
+        o = Sophia::Api.document @{{db_name}}
+        {% for key, type in k %}
+          {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
+          {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
+          {% else %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}].value{% end %}
+        {% end %}
+        r = Sophia::Api.get? @{{db_name}}, o
+        return nil unless r
         \{
-          {% for key, type in t.resolve %}
-            {% if type.id.starts_with? "UInt" %}{{key.id}}: Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
-            {% elsif type.id == "String" %}{{key.id}}: Api.getstring?({{o}}, {{key.id.stringify}}).not_nil!,
-            {% else %}{{key.id}}: {{type}}.new Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}},{% end %}
+          {% for key, type in v %}
+            {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?(r, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
+            {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?(r, {{key.id.stringify}}).not_nil!,
+            {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?(r, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
           {% end %}
         }
-      {% end %}
-    end
-
-    macro mset(o, v, t)
-      {% if t.resolve != Nil %}
-        {% for key, type in t.resolve %}
-          {% if type.id.starts_with? "UInt" %}Api.setint o, {{key.id.stringify}}, {{v}}[:{{key.id}}]
-          {% elsif type.id == "String" %}Api.setstring o, {{key.id.stringify}}, {{v}}[:{{key.id}}]
-          {% else %}Api.setint o, {{key.id.stringify}}, {{v}}[:{{key.id}}].value{% end %}
+      end
         {% end %}
+
+      def from(key : { {% for key, type in k %}{{key}}: {{type}},{% end %} }, order : String = ">=", &)
+        cursor = Sophia::Api.cursor @env
+        o = Sophia::Api.document @{{db_name}}
+        {% for key, type in k %}
+          {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
+          {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
+          {% else %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}].value{% end %}
+        {% end %}
+        while o = Sophia::Api.get? cursor, o
+          key = \{ {% for key, type in k %}
+              {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?(o, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
+              {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?(o, {{key.id.stringify}}).not_nil!,
+              {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?(o, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
+            {% end %}
+          }
+          {% if db_scheme[:value] %}
+          value = \{ {% for key, type in v %}
+              {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?(o, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
+              {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?(o, {{key.id.stringify}}).not_nil!,
+              {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?(o, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
+            {% end %} }
+          yield key, value
+          {% else %}
+          yield key
+          {% end %}
+        end
+        Sophia::Api.destroy cursor
+      end
+
+      def delete(key : { {% for key, type in k %}{{key}}: {{type}},{% end %} })
+        o = Sophia::Api.document @{{db_name}}
+        {% for key, type in k %}
+          {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
+          {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
+          {% else %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}].value{% end %}
+        {% end %}
+        Sophia::Api.delete @{{db_name}}, o
+      end
       {% end %}
-    end
-
-    macro iftx(method, o)
-      if @tx
-        Api.{{method}} @tx.not_nil!, {{o}}
-      else
-        Api.{{method}} @db.not_nil!, {{o}}
-      end
-    end
-
-    def []=(key : K, value : V)
-      o = Api.document @db
-      mset o, key, K
-      mset o, value, V
-      iftx set, o
-    end
-
-    protected def get_o?(key : K)
-      o = Api.document @db
-      mset o, key, K
-      iftx get?, o
-    end
-
-    def has_key?(key : K)
-      get_o?(key) != nil
-    end
-
-    def []?(key : K)
-      o = get_o? key
-      return nil unless o
-      mget o, V
-    end
-
-    def from(key : K, order : String = ">=", &)
-      cursor = Api.cursor @environment.env
-      o = Api.document @db
-      mset o, key, K
-      while o = Api.get? cursor, o
-        yield mget(o, K), mget(o, V)
-      end
-      Api.destroy cursor
-    end
-
-    def delete(key : K)
-      o = Api.document @db
-      mset o, key, K
-      iftx delete, o
     end
   end
 end

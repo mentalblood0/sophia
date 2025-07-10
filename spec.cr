@@ -47,57 +47,44 @@ describe Sophia do
     sk = {_0_state: State::Rejected, _1_post_id: 4_u32}
     sd = sk
 
-    it "sets key=value" do
-      env.tags[tk] = tv # key/value syntax
-      env << td         # document syntax
-
-      env.posts[pk] = pv # key/value syntax
-      env << pd          # document syntax
-
-      env.states[sk] = nil # key/value syntax
-      env << sd            # document syntax
+    it "inserts documents" do
+      env << td << pd << sd
     end
 
     it "check if has key" do
-      env.tags.has_key?(tk).should eq true
-      env.posts.has_key?(pk).should eq true
-      env.states.has_key?(sk).should eq true
+      env.has_key?(tk).should eq true
+      env.has_key?(pk).should eq true
+      env.has_key?(sk).should eq true
     end
 
     it "get value by key" do
-      env.tags[tk]?.should eq tv
-      env.posts[pk]?.should eq pv
-      env.states[sk]?.should eq nil
+      env[tk]?.should eq tv
+      env[pk]?.should eq pv
     end
 
     it "iterate from key" do
-      env.tags.from(tk, ">=") do |k, v|
-        env.tags[k]?.should eq v
+      env.from(tk, ">=") do |k, v|
+        env[k]?.should eq v
       end
     end
 
     it "delete key/value pair" do
-      env.tags.delete tk
-      env.tags[tk]?.should eq nil
-      env.posts.delete pk
-      env.posts[pk]?.should eq nil
+      env.delete tk
+      env[tk]?.should eq nil
+      env.delete pk
+      env[pk]?.should eq nil
 
-      env.states.has_key?(sk).should eq true
-      env.states[sk]?.should eq nil
-      env.states.delete sk
-      env.states.has_key?(sk).should eq false
-      env.states[sk]?.should eq nil
+      env.has_key?(sk).should eq true
+      env.delete sk
+      env.has_key?(sk).should eq false
     end
 
     it "perform operations in transaction" do
       env.transaction do |tx|
-        ttags = env.tags.dup
-
-        ttags.tx = tx
-        ttags[tk] = tv
-        ttags[tk]?.should eq tv
-        ttags.delete tk
-        ttags[tk]?.should eq nil
+        tx << td
+        tx[tk]?.should eq tv
+        tx.delete tk
+        tx[tk]?.should eq nil
       end
     end
   end
