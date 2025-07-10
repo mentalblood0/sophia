@@ -249,85 +249,105 @@ module Sophia
         {% for key, type in k %}{{key}}: {{type}},{% end %}
         {% for key, type in v %}{{key}}: {{type}},{% end %}
       })
-        o = Sophia::Api.document @{{db_name}}
-        {% for x in [k, v] %}
-          {% for key, type in x %}
-            {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, document[:{{key.id}}]
-            {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, document[:{{key.id}}]
-            {% else %}Sophia::Api.setint o, {{key.id.stringify}}, document[:{{key.id}}].value{% end %}
+        begin
+          o = Sophia::Api.document @{{db_name}}
+          {% for x in [k, v] %}
+            {% for key, type in x %}
+              {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, document[:{{key.id}}]
+              {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, document[:{{key.id}}]
+              {% else %}Sophia::Api.setint o, {{key.id.stringify}}, document[:{{key.id}}].value{% end %}
+            {% end %}
           {% end %}
-        {% end %}
-        Sophia::Api.set @{{db_name}}, o
+          Sophia::Api.set @{{db_name}}, o
+        rescue ex : Sophia::Exception
+          raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
+        end
         self
       end
 
       def has_key?(key : { {% for key, type in k %}{{key}}: {{type}},{% end %} })
-        o = Sophia::Api.document @{{db_name}}
-        {% for key, type in k %}
-          {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
-          {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
-          {% else %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}].value{% end %}
-        {% end %}
-        Sophia::Api.get?(@{{db_name}}, o) != nil
+        begin
+          o = Sophia::Api.document @{{db_name}}
+          {% for key, type in k %}
+            {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
+            {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
+            {% else %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}].value{% end %}
+          {% end %}
+          return Sophia::Api.get?(@{{db_name}}, o) != nil
+        rescue ex : Sophia::Exception
+          raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
+        end
       end
 
         {% if db_scheme[:value] %}
       def []?(key : { {% for key, type in k %}{{key}}: {{type}},{% end %} })
-        o = Sophia::Api.document @{{db_name}}
-        {% for key, type in k %}
-          {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
-          {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
-          {% else %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}].value{% end %}
-        {% end %}
-        r = Sophia::Api.get? @{{db_name}}, o
-        return nil unless r
-        \{
-          {% for key, type in v %}
-            {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?(r, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
-            {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?(r, {{key.id.stringify}}).not_nil!,
-            {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?(r, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
+        begin
+          o = Sophia::Api.document @{{db_name}}
+          {% for key, type in k %}
+            {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
+            {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
+            {% else %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}].value{% end %}
           {% end %}
-        }
+          r = Sophia::Api.get? @{{db_name}}, o
+          return nil unless r
+          return \{
+            {% for key, type in v %}
+              {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?(r, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
+              {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?(r, {{key.id.stringify}}).not_nil!,
+              {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?(r, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
+            {% end %}
+          }
+        rescue ex : Sophia::Exception
+          raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
+        end
       end
         {% end %}
 
       def from(key : { {% for key, type in k %}{{key}}: {{type}},{% end %} }, order : String = ">=", &)
-        cursor = Sophia::Api.cursor @env
-        o = Sophia::Api.document @{{db_name}}
-        {% for key, type in k %}
-          {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
-          {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
-          {% else %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}].value{% end %}
-        {% end %}
-        while o = Sophia::Api.get? cursor, o
-          key = \{ {% for key, type in k %}
-              {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?(o, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
-              {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?(o, {{key.id.stringify}}).not_nil!,
-              {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?(o, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
-            {% end %}
-          }
-          {% if db_scheme[:value] %}
-          value = \{ {% for key, type in v %}
-              {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?(o, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
-              {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?(o, {{key.id.stringify}}).not_nil!,
-              {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?(o, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
-            {% end %} }
-          yield key, value
-          {% else %}
-          yield key
+        begin
+          cursor = Sophia::Api.cursor @env
+          o = Sophia::Api.document @{{db_name}}
+          {% for key, type in k %}
+            {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
+            {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
+            {% else %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}].value{% end %}
           {% end %}
+          while o = Sophia::Api.get? cursor, o
+            key = \{ {% for key, type in k %}
+                {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?(o, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
+                {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?(o, {{key.id.stringify}}).not_nil!,
+                {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?(o, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
+              {% end %}
+            }
+            {% if db_scheme[:value] %}
+            value = \{ {% for key, type in v %}
+                {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?(o, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
+                {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?(o, {{key.id.stringify}}).not_nil!,
+                {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?(o, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
+              {% end %} }
+            yield key, value
+            {% else %}
+            yield key
+            {% end %}
+          end
+          Sophia::Api.destroy cursor
+        rescue ex : Sophia::Exception
+          raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
         end
-        Sophia::Api.destroy cursor
       end
 
       def delete(key : { {% for key, type in k %}{{key}}: {{type}},{% end %} })
-        o = Sophia::Api.document @{{db_name}}
-        {% for key, type in k %}
-          {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
-          {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
-          {% else %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}].value{% end %}
-        {% end %}
-        Sophia::Api.delete @{{db_name}}, o
+        begin
+          o = Sophia::Api.document @{{db_name}}
+          {% for key, type in k %}
+            {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
+            {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
+            {% else %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}].value{% end %}
+          {% end %}
+          Sophia::Api.delete @{{db_name}}, o
+        rescue ex : Sophia::Exception
+          raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
+        end
       end
       {% end %}
     end
