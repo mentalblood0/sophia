@@ -190,7 +190,7 @@ module Sophia
 
             # key
             {% i = 0 %}
-            {% for path_value in db_scheme[:key].to_a.sort_by { |k, _| k.stringify } %}
+            {% for path_value in db_scheme[:key].to_a %}
               {% if type_to_s.has_key? path_value[1].stringify %}
             Sophia::Api.set @env, "{{kscheme.id}}.{{path_value[0]}}", "{{type_to_s[path_value[1].stringify].id}},key({{i}})"
               {% else %}

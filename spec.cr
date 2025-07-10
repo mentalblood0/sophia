@@ -19,8 +19,8 @@ end
 
 Sophia.define_env TestEnv, {tags: {key: {name: String},
                                    value: {type: String}},
-                            posts: {key: {_0_host: String,
-                                          _1_id: UInt32},
+                            posts: {key: {host: String,
+                                          id: UInt32},
                                     value: {url: String,
                                             tags: String,
                                             value_state: ValueState}},
@@ -40,9 +40,9 @@ describe Sophia do
     tv = {type: "type"}
     td = {name: "tag", type: "type"}
 
-    pk = {_0_host: "host", _1_id: 1_u32}
+    pk = {host: "host", id: 1_u32}
     pv = {url: "url", tags: "tags", value_state: ValueState::B}
-    pd = {_0_host: "host", _1_id: 1_u32, url: "url", tags: "tags", value_state: ValueState::B}
+    pd = {host: "host", id: 1_u32, url: "url", tags: "tags", value_state: ValueState::B}
 
     sk = {_0_state: State::Rejected, _1_post_id: 4_u32}
     sd = sk
