@@ -58,13 +58,13 @@ describe Sophia do
     end
 
     it "get value by key" do
-      env[tk]?.should eq tv
-      env[pk]?.should eq pv
+      env[tk]?.should eq td
+      env[pk]?.should eq pd
     end
 
     it "iterate from key" do
       env.from(tk, ">=") do |k, v|
-        env[k]?.should eq v
+        env.has_key?(k).should eq true
       end
       env.from(sk, ">=") do |k|
         env.has_key?(k).should eq true

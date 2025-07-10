@@ -312,10 +312,12 @@ module Sophia
           r = Sophia::Api.get? target, o
           return nil unless r
           return \{
-            {% for key, type in v %}
-              {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?(r, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
-              {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?(r, {{key.id.stringify}}).not_nil!,
-              {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?(r, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
+            {% for x in [k, v] %}
+              {% for key, type in x %}
+                {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?(r, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
+                {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?(r, {{key.id.stringify}}).not_nil!,
+                {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?(r, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
+              {% end %}
             {% end %}
           }
         rescue ex : Sophia::Exception
