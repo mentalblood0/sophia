@@ -83,11 +83,16 @@ describe Sophia do
     end
 
     it "perform operations in transaction" do
-      env.transaction do |tx|
-        tx << td
-        tx[tk]?.should eq tv
-        tx.delete tk
-        tx[tk]?.should eq nil
+      env.delete tk
+      env.has_key?(tk).should eq false
+      begin
+        env.transaction do |tx|
+          tx << td
+          tx.has_key?(tk).should eq true
+          raise "oh no"
+        end
+      rescue
+        env.has_key?(tk).should eq false
       end
     end
   end

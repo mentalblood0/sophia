@@ -146,7 +146,13 @@ module Sophia
     def transaction(&)
       d = self.dup
       tx = Api.begin @env
-      yield d
+      d.tx = tx
+      begin
+        yield d
+      rescue ex
+        Api.destroy tx
+        raise ex
+      end
       Api.commit tx
     end
 
