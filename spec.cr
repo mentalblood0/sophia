@@ -24,8 +24,8 @@ Sophia.define_env TestEnv, {tags: {key: {name: String},
                                     value: {url: String,
                                             tags: String,
                                             value_state: ValueState}},
-                            states: {key: {_0_state: State,
-                                           _1_post_id: UInt32}}}
+                            states: {key: {state: State,
+                                           post_id: UInt32}}}
 
 describe Sophia do
   describe "exp" do
@@ -44,7 +44,7 @@ describe Sophia do
     pv = {url: "url", tags: "tags", value_state: ValueState::B}
     pd = {host: "host", id: 1_u32, url: "url", tags: "tags", value_state: ValueState::B}
 
-    sk = {_0_state: State::Rejected, _1_post_id: 4_u32}
+    sk = {state: State::Rejected, post_id: 4_u32}
     sd = sk
 
     it "inserts documents" do
