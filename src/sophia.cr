@@ -125,6 +125,7 @@ module Sophia
 
   class Environment
     property tx : Sophia::P?
+    property destroy_on_collect : Bool = true
     @env : P = P.null
 
     def last_error_msg
@@ -145,6 +146,7 @@ module Sophia
 
     def transaction(&)
       d = self.dup
+      d.destroy_on_collect = false
       tx = Api.begin @env
       d.tx = tx
       begin
@@ -157,7 +159,7 @@ module Sophia
     end
 
     def finalize
-      Api.destroy @env
+      Api.destroy @env if @destroy_on_collect
     end
   end
 
