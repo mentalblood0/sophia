@@ -332,6 +332,7 @@ module Sophia
         begin
           cursor = Sophia::Api.cursor @env
           o = Sophia::Api.document @{{db_name}}
+          Sophia::Api.setstring o, "order", order
           {% for key, type in k %}
             {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, key[:{{key.id}}]
             {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, key[:{{key.id}}]
