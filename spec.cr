@@ -66,6 +66,9 @@ describe Sophia do
       env.from(tk, ">=") do |k, v|
         env[k]?.should eq v
       end
+      env.from(sk, ">=") do |k|
+        env.has_key?(k).should eq true
+      end
     end
 
     it "delete key/value pair" do
