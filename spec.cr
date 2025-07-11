@@ -28,9 +28,6 @@ Sophia.define_env TestEnv, {tags: {key: {name: String},
                                            post_id: UInt32}}}
 
 describe Sophia do
-  describe "exp" do
-  end
-
   describe "Database" do
     opts = Sophia::H{"compression"      => "zstd",
                      "compaction.cache" => 1_i64 * 1024 * 1024 * 1024}
@@ -47,8 +44,9 @@ describe Sophia do
     sk = {state: State::Rejected, post_id: 4_u32}
     sd = sk
 
-    it "inserts documents" do
-      env << td << pd << sd
+    it "insert documents" do
+      env << td << pd << sd # one by one
+      env << [td, pd, sd]   # in transaction
     end
 
     it "check if has key" do
@@ -82,7 +80,7 @@ describe Sophia do
       env.has_key?(sk).should eq false
     end
 
-    it "perform operations in transaction" do
+    it "perform arbitrary operations in transaction" do
       env.delete tk
       env.has_key?(tk).should eq false
       begin

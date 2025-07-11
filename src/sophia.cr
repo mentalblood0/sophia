@@ -360,6 +360,20 @@ module Sophia
         end
       end
       {% end %}
+      def <<(payload : Array({% for db_scheme_i in s.values.map_with_index { |d, i| {d, i} } %}
+        {% k = db_scheme_i[0][:key] %}
+        {% if db_scheme_i[0][:value] %}
+          {% v = db_scheme_i[0][:value] %}
+        {% else %}
+          {% v = {} of Symbol => Type %}
+        {% end %}
+        { {% for key, type in k %}{{key}}: {{type}},{% end %}
+        {% for key, type in v %}{{key}}: {{type}},{% end %} }{% if db_scheme_i[1] < s.size - 1 %} |{% end %}
+      {% end %}))
+        self.transaction do |tx|
+          payload.each { |document| tx << document }
+        end
+      end
     end
   end
 end
