@@ -112,12 +112,12 @@ module Sophia
       tx
     end
 
-    protected def self.commit(tx : P)
+    def self.commit(tx : P)
       e = CommitResult.new LibSophia.commit tx
       raise Exception.new "sp_commit(#{tx}) returned #{e}" unless e == CommitResult::Success
     end
 
-    protected def self.destroy(o : P)
+    def self.destroy(o : P)
       e = LibSophia.destroy o
       raise Exception.new "sp_destroy(#{o}) returned #{e}" unless (e) == 0
     end
@@ -179,6 +179,14 @@ module Sophia
           {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?({{o}}, {{key.id.stringify}}).not_nil!,
           {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
         {% end %}
+      {% end %}
+    }
+  end
+
+  macro mjoin(*xx)
+    \{
+      {% for x in xx %}
+        {% for key, type in x %}{{key}}: {{type}},{% end %}
       {% end %}
     }
   end
@@ -324,22 +332,43 @@ module Sophia
       end
         {% end %}
 
+      class {{db_name.id.stringify.titleize.id}}Cursor
+        getter data : {
+          {% for key, type in k %}{{key}}: {{type}},{% end %}
+          {% for key, type in v %}{{key}}: {{type}},{% end %}
+        }? 
+      
+        protected def initialize(@cursor : Sophia::P, @o : Sophia::P?)
+        end
+
+        def next
+          return nil unless @o
+          @o = Sophia::Api.get? @cursor, @o.not_nil!
+          @data = unless @o
+                    nil
+                  else
+                    Sophia.mget @o.not_nil!, {{k}}{% if db_scheme[:value] %}, {{v}}{% end %}
+                  end
+        end
+
+        def finalize
+          Sophia::Api.destroy @cursor
+        end
+      end
+
+      def cursor(key : {{k}}, order : String = ">=")
+        o = Sophia::Api.document @{{db_name}}
+        Sophia::Api.setstring o, "order", order
+        Sophia.mset o, key, {{k}}
+        {{db_name.id.stringify.titleize.id}}Cursor.new Sophia::Api.cursor(@env), o
+      end
+
       def from(key : {{k}}, order : String = ">=", &)
         begin
-          cursor = Sophia::Api.cursor @env
-          o = Sophia::Api.document @{{db_name}}
-          Sophia::Api.setstring o, "order", order
-          Sophia.mset o, key, {{k}}
-          while o = Sophia::Api.get? cursor, o
-            key = Sophia.mget o, {{k}}
-            {% if db_scheme[:value] %}
-            value = Sophia.mget o, {{v}}
-            yield key, value
-            {% else %}
-            yield key
-            {% end %}
+          c = cursor key, order
+          while data = c.next
+            yield data
           end
-          Sophia::Api.destroy cursor
         rescue ex : Sophia::Exception
           raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
         end
