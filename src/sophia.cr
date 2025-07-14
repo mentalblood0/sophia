@@ -350,10 +350,6 @@ module Sophia
                     Sophia.mget @o.not_nil!, {{k}}{% if db_scheme[:value] %}, {{v}}{% end %}
                   end
         end
-
-        def finalize
-          Sophia::Api.destroy @cursor
-        end
       end
 
       def cursor(key : {{k}}, order : String = ">=")
