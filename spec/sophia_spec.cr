@@ -1,6 +1,6 @@
 require "spec"
 
-require "./src/sophia"
+require "../src/sophia"
 
 Log.setup :debug
 

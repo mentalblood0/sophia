@@ -203,7 +203,7 @@ module Sophia
             # db
             Sophia::Api.set @env, "db", {{db_name.stringify}}
             {% kscheme = "db.#{db_name}.scheme" %}
-            
+
             # fields
             {% for key, _ in db_scheme[:key].keys %}Sophia::Api.set @env, {{kscheme}}, {{key.stringify}}
             {% end %}
@@ -234,7 +234,7 @@ module Sophia
               {% end %}
               {% i += 1 %}
             {% end %}
-            
+
             # value
             {% if db_scheme[:value] %}
               {% for path, value in db_scheme[:value] %}
@@ -336,8 +336,8 @@ module Sophia
         getter data : {
           {% for key, type in k %}{{key}}: {{type}},{% end %}
           {% for key, type in v %}{{key}}: {{type}},{% end %}
-        }? 
-      
+        }?
+
         protected def initialize(@cursor : Sophia::P, @o : Sophia::P?)
         end
 
@@ -349,6 +349,11 @@ module Sophia
                   else
                     Sophia.mget @o.not_nil!, {{k}}{% if db_scheme[:value] %}, {{v}}{% end %}
                   end
+        end
+
+        def finalize
+          Sophia::Api.destroy @o.not_nil! if @o
+          Sophia::Api.destroy @cursor
         end
       end
 
@@ -365,6 +370,7 @@ module Sophia
           while data = c.next
             yield data
           end
+          Sophia::Api.destroy data.not_nil! if data
         rescue ex : Sophia::Exception
           raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
         end
