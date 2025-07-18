@@ -1,4 +1,4 @@
-# sophia
+# 📑 sophia
 
 [Sophia](https://github.com/pmwkaa/sophia) interface for Crystal
 
