@@ -325,7 +325,9 @@ module Sophia
           Sophia.mset o, key, {{k}}
           r = Sophia::Api.get? target, o
           return nil unless r
-          return Sophia.mget r, {{k}}, {{v}}
+          result = Sophia.mget r, {{k}}, {{v}}
+          Sophia::Api.destroy r
+          result
         rescue ex : Sophia::Exception
           raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
         end
