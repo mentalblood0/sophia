@@ -173,20 +173,25 @@ module Sophia
 
   macro mget(o, *xx)
     \{
-      {% for x in xx %}
-        {% for key, type in x %}
-          {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
-          {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?({{o}}, {{key.id.stringify}}).not_nil!,
-          {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
+      {% skip = false %}
+      {% for i in (0..xx.size - 1) %}
+        {% if skip %}
+          {% skip = false %}
+        {% else %}
+          {% x = xx[i] %}
+          {% if x.id.starts_with? "{" %}
+            {% for key, type in x %}
+              {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
+              {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?({{o}}, {{key.id.stringify}}).not_nil!,
+              {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
+            {% end %}
+          {% else %}
+            {% for key, _ in xx[i + 1] %}
+              {{key.id}}: {{x}}[:{{key}}],
+            {% end %}
+            {% skip = true %}
+          {% end %}
         {% end %}
-      {% end %}
-    }
-  end
-
-  macro mjoin(*xx)
-    \{
-      {% for x in xx %}
-        {% for key, type in x %}{{key}}: {{type}},{% end %}
       {% end %}
     }
   end
@@ -325,7 +330,7 @@ module Sophia
           Sophia.mset o, key, {{k}}
           r = Sophia::Api.get? target, o
           return nil unless r
-          result = Sophia.mget r, {{k}}, {{v}}
+          result = Sophia.mget r, key, {{k}}, {{v}}
           Sophia::Api.destroy r
           result
         rescue ex : Sophia::Exception
