@@ -312,7 +312,12 @@ module Sophia
                      @{{db_name}}
                    end
           Sophia.mset o, key, {{k}}
-          return Sophia::Api.get?(target, o) != nil
+          if r = Sophia::Api.get?(target, o)
+            Sophia::Api.destroy r
+            true
+          else
+            false
+          end
         rescue ex : Sophia::Exception
           raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
         end
