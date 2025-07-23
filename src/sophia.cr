@@ -20,7 +20,7 @@ module Sophia
     def self.setint(o : P, path : String, value : UInt64 | UInt32 | UInt16 | UInt8 | Int64)
       Log.debug { "sp_setint(#{o}, \"#{path}\", #{value})" }
       e = LibSophia.setint o, path, value
-      raise Exception.new "sp_setint(#{o}, #{path}, #{value}) returned #{e}" unless e == 0
+      raise Exception.new "sp_setint(#{o}, #{path}, #{value}) returned #{e}" if e == -1
     end
 
     def self.setstring(o : P, path : String, value : String)
@@ -267,6 +267,18 @@ module Sophia
         rescue ex : Sophia::Exception
           raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
         end
+      end
+
+      def checkpoint
+        {% for db_name, _ in s %}
+          set "db.{{db_name}}.compaction.checkpoint", 0_i64
+        {% end %}
+        set "scheduler.run", 0_i64
+        {% for db_name, _ in s %}
+          while getint("db.{{db_name}}.scheduler.checkpoint") == 1
+            sleep 5.milliseconds
+          end
+        {% end %}
       end
 
       {% for db_name, db_scheme in s %}
