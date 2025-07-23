@@ -269,16 +269,20 @@ module Sophia
         end
       end
 
-      def checkpoint
+      def checkpoint(waiting_threshold : Time::Span = 5.milliseconds)
         {% for db_name, _ in s %}
           set "db.{{db_name}}.compaction.checkpoint", 0_i64
         {% end %}
         set "scheduler.run", 0_i64
-        {% for db_name, _ in s %}
-          while getint("db.{{db_name}}.scheduler.checkpoint") == 1
-            sleep 5.milliseconds
-          end
-        {% end %}
+
+        while ({% for db_name_i in s.keys.map_with_index { |d, i| {d, i} } %}
+          {% db_name = db_name_i[0] %}
+          {% i = db_name_i[1] %}
+          (getint("db.{{db_name}}.scheduler.checkpoint") == 1){% if i < s.size - 1 %} ||{% end %}
+          {% end %}
+        )
+          sleep waiting_threshold
+        end
       end
 
       {% for db_name, db_scheme in s %}

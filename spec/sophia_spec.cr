@@ -104,4 +104,6 @@ describe Sophia do
       env.has_key?(tk).should eq false
     end
   end
+
+  env.checkpoint
 end
