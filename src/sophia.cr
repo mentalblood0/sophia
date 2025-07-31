@@ -129,7 +129,11 @@ module Sophia
     @env : P = P.null
 
     def last_error_msg
-      Api.getstring?(@env, "sophia.error").not_nil!
+      begin
+        Api.getstring?(@env, "sophia.error").not_nil!
+      rescue ex
+        "Exception while getting last error message: #{ex}"
+      end
     end
 
     def set(path : String, value : Value)
@@ -147,14 +151,9 @@ module Sophia
     def transaction(&)
       d = self.dup
       d.destroy_on_collect = false
-      tx = Api.begin @env
+      Sophia.mex ({tx = Api.begin @env}), nil
       d.tx = tx
-      begin
-        yield d
-      rescue ex
-        Api.destroy tx
-        raise ex
-      end
+      Sophia.mex ({yield d}), tx
       Api.commit tx
     end
 
@@ -196,6 +195,17 @@ module Sophia
     }
   end
 
+  macro mex(b, *oo)
+    begin
+      {{b}}
+    rescue ex : Sophia::Exception
+      {% for o in oo %}
+        Sophia::Api.destroy {{o}}.not_nil! if {{o}}
+      {% end %}
+      raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
+    end
+  end
+
   macro define_env(env_name, s)
     class {{env_name}} < Sophia::Environment
       {% for db_name, _ in s %}@{{db_name}} : Sophia::P = Sophia::P.null
@@ -203,7 +213,7 @@ module Sophia
 
       def initialize(settings : Sophia::H, dbs_settings : NamedTuple({% for db_name, _ in s %} {{db_name}}: Sophia::H, {% end %}))
         @env = Sophia::Api.env
-        begin
+        Sophia.mex (begin
           {% for db_name, db_scheme in s %}
             # db
             Sophia::Api.set @env, "db", {{db_name.stringify}}
@@ -264,9 +274,7 @@ module Sophia
 
           {% for db_name in s %}@{{db_name}} = Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!
           {% end %}
-        rescue ex : Sophia::Exception
-          raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
-        end
+        end), nil
       end
 
       def checkpoint(waiting_threshold : Time::Span = 5.milliseconds)
@@ -303,30 +311,28 @@ module Sophia
         {% for key, type in k %}{{key}}: {{type}},{% end %}
         {% for key, type in v %}{{key}}: {{type}},{% end %}
       })
-        begin
-          o = Sophia::Api.document @{{db_name}}
-          target = if @tx
-                     @tx.not_nil!
-                   else
-                     @{{db_name}}
-                   end
+        Sophia.mex ({o = Sophia::Api.document @{{db_name}}}), nil
+        target = if @tx
+                   @tx.not_nil!
+                 else
+                   @{{db_name}}
+                 end
+        Sophia.mex (begin
           Sophia.mset o, document, {{k}}
           {% if db_scheme[:value] %}Sophia.mset o, document, {{v}}{% end %}
           Sophia::Api.set target, o
-        rescue ex : Sophia::Exception
-          raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
-        end
+        end), o
         self
       end
 
       def has_key?(key : {{k}})
-        begin
-          o = Sophia::Api.document @{{db_name}}
-          target = if @tx
-                     @tx.not_nil!
-                   else
-                     @{{db_name}}
-                   end
+        Sophia.mex ({o = Sophia::Api.document @{{db_name}}}), nil
+        target = if @tx
+                   @tx.not_nil!
+                 else
+                   @{{db_name}}
+                 end
+        Sophia.mex (begin
           Sophia.mset o, key, {{k}}
           if r = Sophia::Api.get?(target, o)
             Sophia::Api.destroy r
@@ -334,29 +340,25 @@ module Sophia
           else
             false
           end
-        rescue ex : Sophia::Exception
-          raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
-        end
+        end), o
       end
 
         {% if db_scheme[:value] %}
       def []?(key : {{k}})
-        begin
-          o = Sophia::Api.document @{{db_name}}
-          target = if @tx
-                     @tx.not_nil!
-                   else
-                     @{{db_name}}
-                   end
+        Sophia.mex ({o = Sophia::Api.document @{{db_name}}}), nil
+        target = if @tx
+                   @tx.not_nil!
+                 else
+                   @{{db_name}}
+                 end
+        Sophia.mex (begin
           Sophia.mset o, key, {{k}}
           r = Sophia::Api.get? target, o
           return nil unless r
           result = Sophia.mget r, key, {{k}}, {{v}}
           Sophia::Api.destroy r
-          result
-        rescue ex : Sophia::Exception
-          raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
-        end
+        end), o
+        result
       end
         {% end %}
 
@@ -366,17 +368,23 @@ module Sophia
           {% for key, type in v %}{{key}}: {{type}},{% end %}
         }?
 
-        protected def initialize(@cursor : Sophia::P, @o : Sophia::P?)
+        protected def initialize(@cursor : Sophia::P, @o : Sophia::P?, @env : Sophia::Environment)
+        end
+
+        def last_error_msg
+          @env.last_error_msg
         end
 
         def next
           return nil unless @o
-          @o = Sophia::Api.get? @cursor, @o.not_nil!
-          @data = unless @o
-                    nil
-                  else
-                    Sophia.mget @o.not_nil!, {{k}}{% if db_scheme[:value] %}, {{v}}{% end %}
-                  end
+          Sophia.mex (begin
+            @o = Sophia::Api.get? @cursor, @o.not_nil!
+            @data = unless @o
+                      nil
+                    else
+                      Sophia.mget @o.not_nil!, {{k}}{% if db_scheme[:value] %}, {{v}}{% end %}
+                    end
+          end), nil
         end
 
         def finalize
@@ -386,37 +394,33 @@ module Sophia
       end
 
       def cursor(key : {{k}}, order : String = ">=")
-        o = Sophia::Api.document @{{db_name}}
-        Sophia::Api.setstring o, "order", order
-        Sophia.mset o, key, {{k}}
-        {{db_name.id.stringify.titleize.id}}Cursor.new Sophia::Api.cursor(@env), o
+        Sophia.mex ({o = Sophia::Api.document @{{db_name}}}), nil
+        Sophia.mex (begin
+          Sophia::Api.setstring o, "order", order
+          Sophia.mset o, key, {{k}}
+        end), o
+        {{db_name.id.stringify.titleize.id}}Cursor.new Sophia::Api.cursor(@env), o, self
       end
 
       def from(key : {{k}}, order : String = ">=", &)
-        begin
-          c = cursor key, order
-          while data = c.next
-            yield data
-          end
-          Sophia::Api.destroy data.not_nil! if data
-        rescue ex : Sophia::Exception
-          raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
+        c = cursor key, order
+        while data = c.next
+          yield data
         end
+        Sophia::Api.destroy data.not_nil! if data
       end
 
       def delete(key : {{k}})
-        begin
-          o = Sophia::Api.document @{{db_name}}
+        Sophia.mex ({o = Sophia::Api.document @{{db_name}}}), nil
           target = if @tx
                      @tx.not_nil!
                    else
                      @{{db_name}}
                    end
+        Sophia.mex (begin
           Sophia.mset o, key, {{k}}
           Sophia::Api.delete target, o
-        rescue ex : Sophia::Exception
-          raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
-        end
+        end), o
       end
       {% end %}
       def <<(payload : Array({% for db_scheme_i in s.values.map_with_index { |d, i| {d, i} } %}
