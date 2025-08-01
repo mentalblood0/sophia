@@ -16,4 +16,5 @@
 
 ## Usage
 
-See spec.cr
+See [spec/sophia_spec.cr](./spec/sophia_spec.cr)
+
