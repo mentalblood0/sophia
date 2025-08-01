@@ -27,7 +27,7 @@ Sophia.define_env TestEnv, {tags: {key: {name: String},
                                            post_id: UInt32}}}
 
 describe Sophia do
-  env = TestEnv.new YAML.parse <<-YAML
+  env = TestEnv.from_yaml <<-YAML
   sophia:
     path: /tmp/sophia
   db:

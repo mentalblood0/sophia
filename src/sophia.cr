@@ -125,6 +125,8 @@ module Sophia
   end
 
   class Environment
+    alias Settings = Hash(String, String | Int64)
+
     property tx : Sophia::P?
     property destroy_on_collect : Bool = true
     @env : P = P.null
@@ -217,7 +219,7 @@ module Sophia
       {% for db_name, _ in s %}@{{db_name}} : Sophia::P = Sophia::P.null
       {% end %}
 
-      protected def flat(data : YAML::Any, prefix = "", result : Hash(String, String | Int64) = {} of String => String | Int64)
+      protected def flat(data : YAML::Any, prefix = "", result : Settings = Settings.new)
         r = data.raw
         case r
         when Hash
@@ -232,7 +234,15 @@ module Sophia
         result
       end
 
+      def self.from_yaml(string_or_io : String | IO)
+        {{env_name}}.new YAML.parse string_or_io
+      end
+
       def initialize(settings : YAML::Any)
+        initialize flat settings
+      end
+
+      def initialize(settings : Settings)
         @env = Sophia::Api.env
         Sophia.mex (begin
           {% for db_name, db_scheme in s %}
@@ -287,7 +297,7 @@ module Sophia
             {% end %}
           {% end %}
 
-          flat(settings).each { |k, v| Sophia::Api.set @env, k, v }
+          settings.each { |k, v| Sophia::Api.set @env, k, v }
           Sophia::Api.open @env
 
           {% for db_name in s %}@{{db_name}} = Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!
