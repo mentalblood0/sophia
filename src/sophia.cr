@@ -153,8 +153,13 @@ module Sophia
       d.destroy_on_collect = false
       Sophia.mex ({tx = Api.begin @env}), nil
       d.tx = tx
-      Sophia.mex ({yield d}), tx
-      Api.commit tx
+      begin
+        yield d
+      rescue ex
+        Api.destroy tx
+        raise ex
+      end
+      Sophia.mex ({Api.commit tx}), tx
     end
 
     def finalize
