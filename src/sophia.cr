@@ -127,8 +127,14 @@ module Sophia
   class Environment
     alias Settings = Hash(String, String | Int64)
 
+    include YAML::Serializable
+    include YAML::Serializable::Strict
+
+    @[YAML::Field(ignore: true)]
     property tx : Sophia::P?
+    @[YAML::Field(ignore: true)]
     property destroy_on_collect : Bool = true
+    @[YAML::Field(ignore: true)]
     @env : P = P.null
 
     def last_error_msg
@@ -216,7 +222,14 @@ module Sophia
 
   macro define_env(env_name, s)
     class {{env_name}} < Sophia::Environment
-      {% for db_name, _ in s %}@{{db_name}} : Sophia::P = Sophia::P.null
+      include YAML::Serializable
+      include YAML::Serializable::Strict
+
+      @opts : YAML::Any
+
+      {% for db_name, _ in s %}
+        @[YAML::Field(ignore: true)]
+        @{{db_name}} : Sophia::P = Sophia::P.null
       {% end %}
 
       protected def flat(data : YAML::Any, prefix = "", result : Settings = Settings.new)
@@ -234,15 +247,7 @@ module Sophia
         result
       end
 
-      def self.from_yaml(string_or_io : String | IO)
-        {{env_name}}.new YAML.parse string_or_io
-      end
-
-      def initialize(settings : YAML::Any)
-        initialize flat settings
-      end
-
-      def initialize(settings : Settings)
+      def after_initialize
         @env = Sophia::Api.env
         Sophia.mex (begin
           {% for db_name, db_scheme in s %}
@@ -297,7 +302,7 @@ module Sophia
             {% end %}
           {% end %}
 
-          settings.each { |k, v| Sophia::Api.set @env, k, v }
+          flat(@opts).each { |k, v| Sophia::Api.set @env, k, v }
           Sophia::Api.open @env
 
           {% for db_name in s %}@{{db_name}} = Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!

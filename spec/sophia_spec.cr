@@ -28,17 +28,18 @@ Sophia.define_env TestEnv, {tags: {key: {name: String},
 
 describe Sophia do
   env = TestEnv.from_yaml <<-YAML
-  sophia:
-    path: /tmp/sophia
-  db:
-    tags: &ddbs
-      compression: zstd
-      compaction:
-        cache: 1_000_000_000
-    posts:
-      <<: *ddbs
-    states:
-      <<: *ddbs
+  opts:
+    sophia:
+      path: /tmp/sophia
+    db:
+      tags: &ddbs
+        compression: zstd
+        compaction:
+          cache: 1_000_000_000
+      posts:
+        *ddbs
+      states:
+        *ddbs
   YAML
 
   tk = {name: "tag"}
