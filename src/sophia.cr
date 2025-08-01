@@ -125,14 +125,8 @@ module Sophia
   end
 
   class Environment
-    include YAML::Serializable
-    include YAML::Serializable::Strict
-
-    @[YAML::Field(ignore: true)]
     property tx : Sophia::P?
-    @[YAML::Field(ignore: true)]
     property destroy_on_collect : Bool = true
-    @[YAML::Field(ignore: true)]
     @env : P = P.null
 
     def last_error_msg
@@ -220,22 +214,25 @@ module Sophia
 
   macro define_env(env_name, s)
     class {{env_name}} < Sophia::Environment
-      include YAML::Serializable
-      include YAML::Serializable::Strict
-
-      getter settings : Sophia::H
-      getter dbs_settings : NamedTuple({% for db_name, _ in s %} {{db_name}}: Sophia::H, {% end %})
-
-      {% for db_name, _ in s %}
-        @[YAML::Field(ignore: true)]
-        @{{db_name}} : Sophia::P = Sophia::P.null
+      {% for db_name, _ in s %}@{{db_name}} : Sophia::P = Sophia::P.null
       {% end %}
 
-      def initialize(@settings, @dbs_settings)
-        after_initialize
+      protected def flat(data : YAML::Any, prefix = "", result : Hash(String, String | Int64) = {} of String => String | Int64)
+        r = data.raw
+        case r
+        when Hash
+          r.each { |k, v| flat v, prefix.empty? ? k.to_s : "#{prefix}.#{k}", result }
+        when Array
+          r.each { |v| flat v, prefix, result }
+        when String, Int64
+          result[prefix] = r
+        else
+          raise Sophia::Exception.new "Not supported type #{typeof(r)} of value #{data.raw}"
+        end
+        result
       end
 
-      def after_initialize
+      def initialize(settings : YAML::Any)
         @env = Sophia::Api.env
         Sophia.mex (begin
           {% for db_name, db_scheme in s %}
@@ -288,12 +285,9 @@ module Sophia
                 {% i += 1 %}
               {% end %}
             {% end %}
-
-            # settings
-            dbs_settings[:{{db_name}}].each { |k, v| Sophia::Api.set @env, "db.{{db_name}}.#{k}", v }
           {% end %}
 
-          Sophia::Api.set @env, settings
+          flat(settings).each { |k, v| Sophia::Api.set @env, k, v }
           Sophia::Api.open @env
 
           {% for db_name in s %}@{{db_name}} = Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!

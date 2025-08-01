@@ -27,13 +27,14 @@ Sophia.define_env TestEnv, {tags: {key: {name: String},
                                            post_id: UInt32}}}
 
 describe Sophia do
-  env = TestEnv.from_yaml <<-YAML
-  settings:
-    sophia.path: /tmp/sophia
-  dbs_settings:
+  env = TestEnv.new YAML.parse <<-YAML
+  sophia:
+    path: /tmp/sophia
+  db:
     tags: &ddbs
       compression: zstd
-      compaction.cache: 1_000_000_000
+      compaction:
+        cache: 1_000_000_000
     posts:
       <<: *ddbs
     states:
