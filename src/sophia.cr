@@ -1,4 +1,5 @@
 require "log"
+require "yaml"
 
 require "./LibSophia.cr"
 
@@ -124,8 +125,14 @@ module Sophia
   end
 
   class Environment
+    include YAML::Serializable
+    include YAML::Serializable::Strict
+
+    @[YAML::Field(ignore: true)]
     property tx : Sophia::P?
+    @[YAML::Field(ignore: true)]
     property destroy_on_collect : Bool = true
+    @[YAML::Field(ignore: true)]
     @env : P = P.null
 
     def last_error_msg
@@ -213,10 +220,22 @@ module Sophia
 
   macro define_env(env_name, s)
     class {{env_name}} < Sophia::Environment
-      {% for db_name, _ in s %}@{{db_name}} : Sophia::P = Sophia::P.null
+      include YAML::Serializable
+      include YAML::Serializable::Strict
+
+      getter settings : Sophia::H
+      getter dbs_settings : NamedTuple({% for db_name, _ in s %} {{db_name}}: Sophia::H, {% end %})
+
+      {% for db_name, _ in s %}
+        @[YAML::Field(ignore: true)]
+        @{{db_name}} : Sophia::P = Sophia::P.null
       {% end %}
 
-      def initialize(settings : Sophia::H, dbs_settings : NamedTuple({% for db_name, _ in s %} {{db_name}}: Sophia::H, {% end %}))
+      def initialize(@settings, @dbs_settings)
+        after_initialize
+      end
+
+      def after_initialize
         @env = Sophia::Api.env
         Sophia.mex (begin
           {% for db_name, db_scheme in s %}

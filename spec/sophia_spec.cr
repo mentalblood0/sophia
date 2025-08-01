@@ -27,9 +27,18 @@ Sophia.define_env TestEnv, {tags: {key: {name: String},
                                            post_id: UInt32}}}
 
 describe Sophia do
-  opts = Sophia::H{"compression"      => "zstd",
-                   "compaction.cache" => 1_i64 * 1024 * 1024 * 1024}
-  env = TestEnv.new Sophia::H{"sophia.path" => "/tmp/sophia"}, {tags: opts, posts: opts, states: opts}
+  env = TestEnv.from_yaml <<-YAML
+  settings:
+    sophia.path: /tmp/sophia
+  dbs_settings:
+    tags: &ddbs
+      compression: zstd
+      compaction.cache: 1_000_000_000
+    posts:
+      <<: *ddbs
+    states:
+      <<: *ddbs
+  YAML
 
   tk = {name: "tag"}
   tv = {type: "type"}
