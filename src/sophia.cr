@@ -25,7 +25,8 @@ module Sophia
 
     def self.setstring(o : P, path : String, value : Bytes)
       Log.debug { "sp_setstring(#{o}, \"#{path}\", #{value}, #{value.size})" }
-      e = LibSophia.setstring o, path, value, value.size
+      return if value.empty?
+      e = LibSophia.setstring o, path, value.to_unsafe, value.size
       raise Exception.new "sp_setstring(#{o}, #{path}, #{value}, #{value.size}) returned #{e}" unless e == 0
     end
 
@@ -49,6 +50,7 @@ module Sophia
     end
 
     def self.getstring?(o : P, path : String) : Bytes?
+      Log.debug { "sp_getstring(#{o}, \"#{path}\")" }
       size = Pointer(Int32).malloc 1_u64
       p = LibSophia.getstring o, path, size
       return nil if p == P.null
@@ -57,23 +59,27 @@ module Sophia
     end
 
     def self.getint?(o : P, path : String)
+      Log.debug { "sp_getint(#{o}, \"#{path}\")" }
       result = LibSophia.getint o, path
       return nil if result == -1
       result
     end
 
     def self.getobject?(o : P, path : String)
+      Log.debug { "sp_getobject(#{o}, \"#{path}\")" }
       r = LibSophia.getobject o, path
       return nil if r == P.null
       r
     end
 
     def self.open(o : P)
+      Log.debug { "sp_open(#{o})" }
       e = LibSophia.open o
       raise Exception.new "sp_open(#{o}) returned #{e}" unless e == 0
     end
 
     def self.document(db : P)
+      Log.debug { "sp_document(#{db})" }
       r = LibSophia.document db
       raise Exception.new "sp_document(#{db}) returned NULL" if r == P.null
       r
@@ -87,39 +93,46 @@ module Sophia
     end
 
     def self.set(o : P, doc : P)
+      Log.debug { "sp_set(#{o}, #{doc})" }
       e = CommitResult.new LibSophia.set o, doc
       raise Exception.new "sp_set(#{o}, #{doc}) returned #{e}" unless e == CommitResult::Success
     end
 
     def self.get?(o : P, doc : P)
+      Log.debug { "sp_get(#{o}, #{doc})" }
       r = LibSophia.get o, doc
       return nil if r == P.null
       r
     end
 
     def self.delete(o : P, doc : P)
+      Log.debug { "sp_delete(#{o}, #{doc})" }
       e = CommitResult.new LibSophia.delete o, doc
       raise Exception.new "sp_delete(#{o}, #{doc}) returned #{e}" unless e == CommitResult::Success
     end
 
     def self.cursor(env : P)
+      Log.debug { "sp_cursor(#{env})" }
       r = LibSophia.cursor env
       raise Exception.new "sp_cursor(#{env}) returned NULL" if r == P.null
       r
     end
 
     def self.begin(env : P)
+      Log.debug { "sp_begin(#{env})" }
       tx = LibSophia.begin env
       raise Exception.new "sp_begin(#{env}) returned NULL" if tx == P.null
       tx
     end
 
     def self.commit(tx : P)
+      Log.debug { "sp_commit(#{tx})" }
       e = CommitResult.new LibSophia.commit tx
       raise Exception.new "sp_commit(#{tx}) returned #{e}" unless e == CommitResult::Success
     end
 
     def self.destroy(o : P)
+      Log.debug { "sp_destroy(#{o})" }
       e = LibSophia.destroy o
       raise Exception.new "sp_destroy(#{o}) returned #{e}" unless (e) == 0
     end
@@ -142,7 +155,7 @@ module Sophia
       begin
         Api.getstring?(@env, "sophia.error").not_nil!
       rescue ex
-        "Exception while getting last error message: #{ex}"
+        "Exception while getting last error message: #{ex}".to_slice.clone
       end
     end
 
@@ -159,6 +172,7 @@ module Sophia
     end
 
     def transaction(&)
+      Log.debug { "Env::transaction()" }
       d = self.dup
       d.destroy_on_collect = false
       Sophia.mex ({tx = Api.begin @env}), nil
@@ -215,10 +229,12 @@ module Sophia
     begin
       {{b}}
     rescue ex : Sophia::Exception
+      msg = "#{ex} (last error message is \"#{String.new last_error_msg}\")"
+      Log.warn { msg }
       {% for o in oo %}
         Sophia::Api.destroy {{o}}.not_nil! if {{o}}
       {% end %}
-      raise Sophia::Exception.new "#{ex} (last error message is \"#{last_error_msg}\")"
+      raise Sophia::Exception.new msg
     end
   end
 
@@ -347,6 +363,7 @@ module Sophia
         {% for key, type in k %}{{key}}: {{type}},{% end %}
         {% for key, type in v %}{{key}}: {{type}},{% end %}
       })
+        Log.debug { "Env<<(#{document})" }
         Sophia.mex ({o = Sophia::Api.document @{{db_name}}}), nil
         target = if @tx
                    @tx.not_nil!
@@ -362,6 +379,7 @@ module Sophia
       end
 
       def has_key?(key : {{k}})
+        Log.debug { "Env::has_key?(#{key})" }
         Sophia.mex ({o = Sophia::Api.document @{{db_name}}}), nil
         target = if @tx
                    @tx.not_nil!
@@ -381,6 +399,7 @@ module Sophia
 
         {% if db_scheme[:value] %}
       def []?(key : {{k}})
+        Log.debug { "Env::[]?(#{key})" }
         Sophia.mex ({o = Sophia::Api.document @{{db_name}}}), nil
         target = if @tx
                    @tx.not_nil!
@@ -412,6 +431,7 @@ module Sophia
         end
 
         def next
+          Log.debug { "Env::Cursor::next()" }
           return nil unless @o
           Sophia.mex (begin
             @o = Sophia::Api.get? @cursor, @o.not_nil!
@@ -424,12 +444,14 @@ module Sophia
         end
 
         def finalize
+          Log.debug { "Env::Cursor::finalize()" }
           Sophia::Api.destroy @o.not_nil! if @o
           Sophia::Api.destroy @cursor
         end
       end
 
       def cursor(key : {{k}}, order : String = ">=")
+        Log.debug { "Env::cursor(#{key}, #{order})" }
         Sophia.mex ({o = Sophia::Api.document @{{db_name}}}), nil
         Sophia.mex (begin
           Sophia::Api.setstring o, "order", order
@@ -439,6 +461,7 @@ module Sophia
       end
 
       def from(key : {{k}}, order : String = ">=", &)
+        Log.debug { "Env::from(#{key}, #{order})" }
         c = cursor key, order
         while data = c.next
           yield data
@@ -447,6 +470,7 @@ module Sophia
       end
 
       def delete(key : {{k}})
+        Log.debug { "Env::delete(#{key})" }
         Sophia.mex ({o = Sophia::Api.document @{{db_name}}}), nil
           target = if @tx
                      @tx.not_nil!
@@ -469,6 +493,7 @@ module Sophia
         { {% for key, type in k %}{{key}}: {{type}},{% end %}
         {% for key, type in v %}{{key}}: {{type}},{% end %} }{% if db_scheme_i[1] < s.size - 1 %} |{% end %}
       {% end %}))
+        Log.debug { "Env<<(#{payload})" }
         self.transaction do |tx|
           payload.each { |document| tx << document }
         end
