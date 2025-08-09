@@ -5,8 +5,7 @@ require "./LibSophia.cr"
 
 module Sophia
   alias H = Hash(String, Value | Array(String))
-  alias P = Pointer(Void)
-  alias Key = String | Int64
+  alias P = Void*
   alias Value = String | Int64 | UInt64 | UInt32 | UInt16 | UInt8 | Nil
 
   class Exception < Exception
@@ -24,10 +23,14 @@ module Sophia
       raise Exception.new "sp_setint(#{o}, #{path}, #{value}) returned #{e}" if e == -1
     end
 
-    def self.setstring(o : P, path : String, value : String)
-      Log.debug { "sp_setstring(#{o}, \"#{path}\", \"#{value}\", #{value.size})" }
-      e = LibSophia.setstring o, path, value, value.bytesize
+    def self.setstring(o : P, path : String, value : Bytes)
+      Log.debug { "sp_setstring(#{o}, \"#{path}\", #{value}, #{value.size})" }
+      e = LibSophia.setstring o, path, value, value.size
       raise Exception.new "sp_setstring(#{o}, #{path}, #{value}, #{value.size}) returned #{e}" unless e == 0
+    end
+
+    def self.setstring(o : P, path : String, value : String)
+      self.setstring o, path, value.to_slice
     end
 
     def self.set(o : P, path : String, value : Value | Array(String))
@@ -45,14 +48,12 @@ module Sophia
       payload.each { |name, value| set o, name, value }
     end
 
-    def self.getstring?(o : P, path : String)
+    def self.getstring?(o : P, path : String) : Bytes?
       size = Pointer(Int32).malloc 1_u64
       p = LibSophia.getstring o, path, size
       return nil if p == P.null
-      return "" if size.value == 0
-      slice = Slice.new(Pointer(UInt8).new(p.address), size.value)
-      slice = slice[0, slice.size - 1] if slice.last == 0
-      String.new slice
+      return Bytes.empty if size.value == 0
+      Slice.new p.as(UInt8*), size.value
     end
 
     def self.getint?(o : P, path : String)
@@ -179,7 +180,7 @@ module Sophia
   macro mset(o, d, x)
     {% for key, type in x %}
       {% if type.id.starts_with? "UInt" %}Sophia::Api.setint o, {{key.id.stringify}}, {{d}}[:{{key.id}}]
-      {% elsif type.id == "String" %}Sophia::Api.setstring o, {{key.id.stringify}}, {{d}}[:{{key.id}}]
+      {% elsif type.id == "String" || type.id == "Bytes" %}Sophia::Api.setstring o, {{key.id.stringify}}, {{d}}[:{{key.id}}]
       {% else %}Sophia::Api.setint o, {{key.id.stringify}}, {{d}}[:{{key.id}}].value{% end %}
     {% end %}
   end
@@ -195,7 +196,8 @@ module Sophia
           {% if x.id.starts_with? "{" %}
             {% for key, type in x %}
               {% if type.id.starts_with? "UInt" %}{{key.id}}: Sophia::Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_u{{type.id[4..]}},
-              {% elsif type.id == "String" %}{{key.id}}: Sophia::Api.getstring?({{o}}, {{key.id.stringify}}).not_nil!,
+              {% elsif type.id == "Bytes" %}{{key.id}}: Sophia::Api.getstring?({{o}}, {{key.id.stringify}}).not_nil!,
+              {% elsif type.id == "String" %}{{key.id}}: String.new(Sophia::Api.getstring?({{o}}, {{key.id.stringify}}).not_nil!),
               {% else %}{{key.id}}: {{type}}.new(Sophia::Api.getint?({{o}}, {{key.id.stringify}}).not_nil!.to_{{type.resolve.constant(type.resolve.constants.first).kind.id}}),{% end %}
             {% end %}
           {% else %}
@@ -262,6 +264,7 @@ module Sophia
             {% end %}{% end %}
 
             {% type_to_s = {"String" => "string",
+                            "Bytes"  => "string",
                             "UInt64" => "u64",
                             "UInt32" => "u32",
                             "UInt16" => "u16",
@@ -276,12 +279,12 @@ module Sophia
             {% i = 0 %}
             {% for path_value in db_scheme[:key].to_a %}
               {% if type_to_s.has_key? path_value[1].stringify %}
-            Sophia::Api.set @env, "{{kscheme.id}}.{{path_value[0]}}", "{{type_to_s[path_value[1].stringify].id}},key({{i}})"
+                Sophia::Api.set @env, "{{kscheme.id}}.{{path_value[0]}}", "{{type_to_s[path_value[1].stringify].id}},key({{i}})"
               {% else %}
                 {% crystal_type_s = path_value[1].resolve.constant(path_value[1].resolve.constants.first).kind.id.stringify %}
                 {% db_type_s = enum_type_to_s[crystal_type_s].id %}
                 {% if db_type_s == "nil" %}{% raise "Sophia does not support underyling type #{crystal_type_s} of enum #{path_value[1]}" %}{% end %}
-            Sophia::Api.set @env, "{{kscheme.id}}.{{path_value[0]}}", "{{db_type_s}},key({{i}})"
+                Sophia::Api.set @env, "{{kscheme.id}}.{{path_value[0]}}", "{{db_type_s}},key({{i}})"
               {% end %}
               {% i += 1 %}
             {% end %}
@@ -290,12 +293,12 @@ module Sophia
             {% if db_scheme[:value] %}
               {% for path, value in db_scheme[:value] %}
                 {% if type_to_s.has_key? value.stringify %}
-              Sophia::Api.set @env, "{{kscheme.id}}.{{path}}", "{{type_to_s[value.stringify].id}}"
+                  Sophia::Api.set @env, "{{kscheme.id}}.{{path}}", "{{type_to_s[value.stringify].id}}"
                 {% else %}
                   {% crystal_type_s = value.resolve.constant(value.resolve.constants.first).kind.id.stringify %}
                   {% db_type_s = enum_type_to_s[crystal_type_s].id %}
                   {% if db_type_s == "nil" %}{% raise "Sophia does not support underyling type #{crystal_type_s} of enum #{value}" %}{% end %}
-            Sophia::Api.set @env, "{{kscheme.id}}.{{path}}", "{{db_type_s}}"
+                  Sophia::Api.set @env, "{{kscheme.id}}.{{path}}", "{{db_type_s}}"
                 {% end %}
                 {% i += 1 %}
               {% end %}

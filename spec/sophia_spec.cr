@@ -17,7 +17,7 @@ enum ValueState : UInt8
 end
 
 Sophia.define_env TestEnv, {tags: {key: {name: String},
-                                   value: {type: String}},
+                                   value: {type: Bytes}},
                             posts: {key: {host: String,
                                           id: UInt32},
                                     value: {url: String,
@@ -43,8 +43,8 @@ describe Sophia do
   YAML
 
   tk = {name: "tag"}
-  tv = {type: "type"}
-  td = {name: "tag", type: "type"}
+  tv = {type: "type".to_slice}
+  td = {name: "tag", type: "type".to_slice}
 
   pk = {host: "host", id: 1_u32}
   pv = {url: "url", tags: "tags", value_state: ValueState::B}
@@ -84,7 +84,7 @@ describe Sophia do
   end
 
   it "iterate from key using block" do
-    t = [] of {name: String, type: String}
+    t = [] of {name: String, type: Bytes}
     env.from(tk, ">=") do |d|
       t << d
     end
