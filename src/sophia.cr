@@ -144,6 +144,8 @@ module Sophia
     include YAML::Serializable::Strict
 
     @[YAML::Field(ignore: true)]
+    getter settings : Settings = Settings.new
+    @[YAML::Field(ignore: true)]
     property tx : Sophia::P?
     @[YAML::Field(ignore: true)]
     property destroy_on_collect : Bool = true
@@ -320,7 +322,8 @@ module Sophia
             {% end %}
           {% end %}
 
-          flat(@opts).each { |k, v| Sophia::Api.set @env, k, v }
+          @settings = flat @opts
+          settings.each { |k, v| Sophia::Api.set @env, k, v }
           Sophia::Api.open @env
 
           {% for db_name in s %}@{{db_name}} = Sophia::Api.getobject?(@env, "db.{{db_name}}").not_nil!
