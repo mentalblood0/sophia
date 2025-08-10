@@ -2,8 +2,6 @@ require "spec"
 
 require "../src/sophia"
 
-Log.setup :debug
-
 enum State : UInt8
   Imported = 0
   Rejected = 1
@@ -43,8 +41,8 @@ describe Sophia do
   YAML
 
   tk = {name: "tag"}
-  tv = {type: "type".to_slice}
-  td = {name: "tag", type: "type".to_slice}
+  tv = {type: "".to_slice}
+  td = {name: "tag", type: "".to_slice}
 
   pk = {host: "host", id: 1_u32}
   pv = {url: "url", tags: "tags", value_state: ValueState::B}

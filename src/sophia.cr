@@ -25,7 +25,6 @@ module Sophia
 
     def self.setstring(o : P, path : String, value : Bytes)
       Log.debug { "sp_setstring(#{o}, \"#{path}\", #{value}, #{value.size})" }
-      return if value.empty?
       e = LibSophia.setstring o, path, value.to_unsafe, value.size
       raise Exception.new "sp_setstring(#{o}, #{path}, #{value}, #{value.size}) returned #{e}" unless e == 0
     end
